@@ -47,7 +47,7 @@ const Carrusel = () => {
     >
       {images.map((image, index) => (
           <Image 
-              //source={{ uri: image.imagen }} 
+              //source={{ uri: image.imagen }} s
               style={styles.carruselImage} 
               resizeMode="cover" 
           />
