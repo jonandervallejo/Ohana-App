@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 
 import { HapticTab } from '@/components/HapticTab';
 import TabBarBackground from '@/components/ui/TabBarBackground';
@@ -30,7 +30,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Inicio',
-          tabBarIcon: ({ color }) => <Ionicons name="home" size={20} color={color} />,
+          tabBarIcon: ({ color }) => <FontAwesome5 name="home" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -51,7 +51,14 @@ export default function TabLayout() {
         name="perfil"
         options={{
           title: 'Perfil',
-          tabBarIcon: ({ color }) => <Ionicons name="person" size={20} color={color} />,
+          tabBarIcon: ({ color }) => <FontAwesome5 name="user" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="tienda"
+        options={{
+          title: 'Tienda',
+          tabBarIcon: ({ color }) => <FontAwesome5 name="shopping-bag" size={24} color={color} />,
         }}
       />
     </Tabs>
