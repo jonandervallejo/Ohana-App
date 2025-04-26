@@ -13,10 +13,12 @@ import {
   Alert,
   TextInput,
   NativeSyntheticEvent,
-  NativeScrollEvent
+  NativeScrollEvent,
+  FlatList,
+  Keyboard
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FontAwesome5 } from '@expo/vector-icons';
+import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -53,6 +55,10 @@ interface Product {
   key?: string; 
 }
 
+interface SearchResult extends Product {
+  imagen_url?: string;
+}
+
 type CategoryName = 'Accesorios' | 'Faldas' | 'Jerseys' | 'Camisetas' | 'Pantalones' | 'Vestidos' | 'Abrigos' | 'Zapatos';
 
 interface CategoryImages {
@@ -82,7 +88,6 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
           ...img,
           imagen: `http://ohanatienda.ddns.net:8000/uploads/productos/${img.imagen.split('/').pop()}`
         }));
-        {/*console.log('URLs de imágenes procesadas:', processedImages.map((img: ImageData) => img.imagen)); */}
         setImages(processedImages);
         setLoading(false);
       } catch (error) {
@@ -199,11 +204,100 @@ const HomeScreen = () => {
   const [isAutoScrollingCategories, setIsAutoScrollingCategories] = useState(false);
   const [isAutoScrollingProducts, setIsAutoScrollingProducts] = useState(false);
   
+  // Estados para la búsqueda
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const searchTimeout = useRef<NodeJS.Timeout | null>(null);
+  
   const router = useRouter();
   const mainScrollRef = useRef<ScrollView>(null);
   const categoriesScrollRef = useRef<ScrollView>(null);
   const productsScrollRef = useRef<ScrollView>(null);
   const carruselScrollRef = useRef<ScrollView>(null);
+
+  // Función para buscar productos
+  // Modificar la función searchProducts en index.tsx
+const searchProducts = async (query: string) => {
+  if (!query || query.trim() === '') {
+    setSearchResults([]);
+    setShowResults(false);
+    return;
+  }
+  
+  setIsSearching(true);
+  setShowResults(true);
+  
+  try {
+    // Busca tanto en productos de hombre como de mujer
+    const response = await axios.get(`http://ohanatienda.ddns.net:8000/api/productos/buscar?q=${encodeURIComponent(query)}`);
+    
+    if (response.data && Array.isArray(response.data)) {
+      const formattedResults = response.data.map((product: any) => ({
+        ...product,
+        imagen_url: `http://ohanatienda.ddns.net:8000/${product.imagen}`
+      }));
+      setSearchResults(formattedResults);
+    } else {
+      setSearchResults([]);
+    }
+  } catch (error) {
+    console.error('Error searching products:', error);
+    setSearchResults([]);
+    
+    // Mostrar mensaje al usuario
+    Alert.alert(
+      "Error de búsqueda",
+      "No se pudo conectar con el servidor. Por favor, intenta más tarde.",
+      [{ text: "OK" }]
+    );
+  } finally {
+    setIsSearching(false);
+  }
+};
+
+// Función para manejar la navegación al seleccionar un producto desde búsqueda
+const handleProductSelect = (product: SearchResult) => {
+  Keyboard.dismiss();
+  setShowResults(false);
+  setSearchQuery('');
+  
+  // Navegar a la página de detalles del producto
+  router.push({
+    pathname: '/detalles',
+    params: { id: product.id.toString() }
+  });
+};
+  
+  // Función para manejar cambios en la búsqueda con debounce
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    
+    // Debounce para evitar llamadas API excesivas
+    if (searchTimeout.current) {
+      clearTimeout(searchTimeout.current);
+    }
+    
+    searchTimeout.current = setTimeout(() => {
+      searchProducts(text);
+    }, 300);
+  };
+  
+  // Cerrar resultados al hacer clic fuera
+  const handlePressOutside = () => {
+    Keyboard.dismiss();
+    setShowResults(false);
+  };
+  
+  // Limpiar el timeout al desmontar
+  useEffect(() => {
+    return () => {
+      if (searchTimeout.current) {
+        clearTimeout(searchTimeout.current);
+      }
+    };
+  }, []);
 
   // Reset all scrolls when returning to the page
   useFocusEffect(
@@ -229,6 +323,11 @@ const HomeScreen = () => {
           });
         }, 100);
       }
+      
+      // Reset search state
+      setSearchQuery('');
+      setSearchResults([]);
+      setShowResults(false);
     }, [categories, products])
   );
 
@@ -441,7 +540,7 @@ const HomeScreen = () => {
     console.log(`Navegando a categoría: ${categoryName} (ID: ${categoryId}) con timestamp: ${Date.now()}`);
     // Navegar a la pantalla de tienda con parámetros de categoría y un timestamp
     router.push({
-      pathname: '/(tabs)/tienda',
+      pathname: '/detalles',
       params: { 
         categoryId: categoryId,
         categoryName: categoryName,
@@ -450,18 +549,14 @@ const HomeScreen = () => {
     });
   };
 
-  const handleProductPress = (product: Product) => {
-    Alert.alert(
-      "Detalles del Producto",
-      `${product.nombre}\n\n${product.descripcion}\n\nPrecio: $${product.precio}`,
-      [
-        {
-          text: "OK",
-          onPress: () => console.log("OK Pressed")
-        }
-      ]
-    );
-  };
+// Función para manejar el clic en productos destacados
+const handleProductPress = (product: Product) => {
+  // Navegar a la página de detalles del producto
+  router.push({
+    pathname: '/(tabs)/tienda',
+    params: { id: product.id.toString() }
+  });
+};
 
   return (
     <SafeAreaView style={styles.container}>
@@ -485,7 +580,26 @@ const HomeScreen = () => {
                 style={styles.searchInput}
                 placeholder="Buscar productos..."
                 placeholderTextColor="#666"
+                value={searchQuery}
+                onChangeText={handleSearchChange}
+                onFocus={() => {
+                  if (searchQuery.trim() !== '') {
+                    setShowResults(true);
+                  }
+                }}
               />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity 
+                  onPress={() => {
+                    setSearchQuery('');
+                    setSearchResults([]);
+                    setShowResults(false);
+                  }}
+                  style={styles.clearButton}
+                >
+                  <FontAwesome5 name="times" size={16} color="#666" />
+                </TouchableOpacity>
+              )}
             </View>
             <TouchableOpacity 
               style={styles.userIconContainer}
@@ -494,13 +608,92 @@ const HomeScreen = () => {
               <FontAwesome5 name="user-circle" size={28} color="#333" />
             </TouchableOpacity>
           </View>
+          
+          {/* Resultados de búsqueda */}
+          {showResults && (
+            <View style={styles.searchResultsContainer}>
+              {isSearching ? (
+                <View style={styles.loadingResults}>
+                  <ActivityIndicator size="small" color="#007AFF" />
+                  <Text style={styles.loadingText}>Buscando...</Text>
+                </View>
+              ) : searchResults.length === 0 ? (
+                <Text style={styles.noResultsText}>
+                  {searchQuery.trim() !== '' ? 'No se encontraron productos' : ''}
+                </Text>
+              ) : (
+                <FlatList
+                  data={searchResults.slice(0, 6)} // Mostrar máximo 6 resultados
+                  keyExtractor={(item) => item.id.toString()}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.searchResultItem}
+                      onPress={() => handleProductSelect(item)}
+                    >
+                      <Image 
+                        source={{ uri: item.imagen_url || `http://ohanatienda.ddns.net:8000/${item.imagen}` }}
+                        style={styles.searchResultImage}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.searchResultInfo}>
+                        <Text style={styles.searchResultName} numberOfLines={1}>
+                          {item.nombre}
+                        </Text>
+                        <Text style={styles.searchResultPrice}>
+                          {formatPrice(item.precio)}
+                        </Text>
+                      </View>
+                      <FontAwesome5 name="chevron-right" size={12} color="#999" />
+                    </TouchableOpacity>
+                  )}
+                  style={styles.searchResultsList}
+                  showsVerticalScrollIndicator={false}
+                  ListFooterComponent={
+                    searchResults.length > 6 ? (
+                      <TouchableOpacity
+                        style={styles.viewAllContainer}
+                        onPress={() => {
+                          router.push({
+                            pathname: '/(tabs)/tienda',
+                            params: { 
+                              searchQuery: searchQuery,
+                              timestamp: Date.now()
+                            }
+                          });
+                          setShowResults(false);
+                          setSearchQuery('');
+                        }}
+                      >
+                        <Text style={styles.viewAllText}>
+                          Ver todos los resultados ({searchResults.length})
+                        </Text>
+                        <FontAwesome5 name="arrow-right" size={12} color="#007AFF" />
+                      </TouchableOpacity>
+                    ) : null
+                  }
+                />
+              )}
+            </View>
+          )}
         </View>
+
+        {/* Overlay para cerrar resultados al hacer clic fuera */}
+        {showResults && (
+          <Pressable
+            style={styles.overlay}
+            onPress={handlePressOutside}
+          />
+        )}
 
         <ScrollView 
           ref={mainScrollRef}
           style={styles.mainScrollView}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
+          onScrollBeginDrag={() => {
+            Keyboard.dismiss();
+            setShowResults(false);
+          }}
         >
           {/* Carrusel */}
           <Carrusel scrollRef={carruselScrollRef} />
@@ -692,6 +885,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
   },
+  clearButton: {
+    padding: 5,
+  },
   userIconContainer: {
     width: 40,
     height: 40,
@@ -705,6 +901,95 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 60,
+  },
+  // Estilos para los resultados de búsqueda
+  searchResultsContainer: {
+    position: 'absolute',
+    top: 60,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    marginHorizontal: 15,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 1000,
+    maxHeight: 350,
+  },
+  searchResultsList: {
+    padding: 10,
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  searchResultImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+    backgroundColor: '#f5f5f5',
+  },
+  searchResultInfo: {
+    flex: 1,
+  },
+  searchResultName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#333',
+  },
+  searchResultPrice: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  loadingResults: {
+    padding: 20,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: '#666',
+    marginLeft: 10,
+    fontSize: 14,
+  },
+  noResultsText: {
+    padding: 20,
+    textAlign: 'center',
+    color: '#666',
+  },
+  overlay: {
+    position: 'absolute',
+    top: 60,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+    zIndex: 999,
+  },
+  viewAllContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  viewAllText: {
+    color: '#007AFF',
+    marginRight: 5,
+    fontSize: 14,
   },
   // Estilos del carrusel
   carruselWrapper: {
