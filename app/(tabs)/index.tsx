@@ -210,7 +210,7 @@ const HomeScreen = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
-  
+   
   const router = useRouter();
   const mainScrollRef = useRef<ScrollView>(null);
   const categoriesScrollRef = useRef<ScrollView>(null);
