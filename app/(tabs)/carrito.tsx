@@ -9,30 +9,30 @@ export default function CarritoScreen() {
   return (
     <View style={styles.container}>
       <ScrollView>
-        <Text style={styles.header}>Checkout</Text>
+        <Text style={styles.header}>Carrito de la compra</Text>
         
         <View style={styles.section}>
-          <Text style={styles.label}>SHIPPING</Text>
+          <Text style={styles.label}>Dirección</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter shipping info"
+            placeholder="Dirección"
             value={shipping}
             onChangeText={setShipping}
           />
         </View>
         
         <View style={styles.section}>
-          <Text style={styles.label}>PAYMENT</Text>
+          <Text style={styles.label}>Pago</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter payment method"
+            placeholder="Itroduzca su método de pago"
             value={payment}
             onChangeText={setPayment}
           />
         </View>
       </ScrollView>
       <TouchableOpacity style={styles.button}>
-        <Text style={styles.buttonText}>Place order</Text>
+        <Text style={styles.buttonText}>Hacer pedido</Text>
       </TouchableOpacity>
     </View>
   );

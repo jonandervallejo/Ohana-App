@@ -15,13 +15,16 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   FlatList,
-  Keyboard
+  Keyboard,
+  ImageBackground,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FontAwesome5, Ionicons } from '@expo/vector-icons';
+import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import axios from 'axios';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 interface ImageData {
@@ -73,25 +76,271 @@ interface CategoryIcons {
 
 const { width } = Dimensions.get('window');
 
+// Importar todas las imágenes locales de una vez
+const DEFAULT_IMAGE = require('@/assets/images/camiseta1.jpg');
+const CATEGORY_IMAGES = {
+  bolso: require('@/assets/images/bolso.jpg'),
+  falda: require('@/assets/images/falda.jpg'),
+  jersey: require('@/assets/images/camisa1.jpg'),
+  camiseta: require('@/assets/images/camiseta1.jpg'),
+  pantalon: require('@/assets/images/pantalon1.jpg'),
+  vestido: require('@/assets/images/falda1.jpg'),
+  abrigo: require('@/assets/images/camisa1.jpg'),
+  zapato: require('@/assets/images/accesorio1.jpg'),
+  accesorio: require('@/assets/images/accesorio.jpg'),
+  chaqueta: require('@/assets/images/chaqueta.jpg')
+};
+
+// API base URL constante
+const API_BASE_URL = 'http://ohanatienda.ddns.net:8000';
+
+// Sistema global de caché de imágenes mejorado
+const ImageCache = {
+  failedImages: new Set<string>(),
+  validImages: new Set<string>(), // Añadido para almacenar URLs válidas
+  markAsFailed: (url: string) => {
+    // Evitar añadir URLs vacías o undefined
+    if (url && url.trim() !== '') {
+      ImageCache.failedImages.add(url);
+    }
+  },
+  markAsValid: (url: string) => {
+    if (url && url.trim() !== '') {
+      ImageCache.validImages.add(url);
+    }
+  },
+  hasFailed: (url: string) => {
+    return !url || url.trim() === '' || ImageCache.failedImages.has(url);
+  },
+  isValid: (url: string) => {
+    return url && url.trim() !== '' && ImageCache.validImages.has(url);
+  },
+  reset: () => {
+    ImageCache.failedImages.clear();
+    ImageCache.validImages.clear();
+  }
+};
+
+// Función mejorada para normalizar URLs de imágenes
+const normalizeImageUrl = (imageUrl: string): string => {
+  if (!imageUrl || typeof imageUrl !== 'string') return '';
+  
+  try {
+    imageUrl = imageUrl.trim();
+    
+    // Si la URL ya está en caché como fallida, no procesar
+    if (ImageCache.hasFailed(imageUrl)) return '';
+    
+    // Si la URL ya incluye la base completa, úsala como está
+    if (imageUrl.startsWith('http')) {
+      return imageUrl;
+    }
+    
+    // Si la URL comienza con //, convertir a https:
+    if (imageUrl.startsWith('//')) {
+      return `https:${imageUrl}`;
+    }
+    
+    // Asegurarnos que la ruta comience con /
+    const path = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+    
+    // Construir URL completa
+    return `${API_BASE_URL}${path}`;
+  } catch (error) {
+    console.error('Error normalizando URL:', error, 'URL original:', imageUrl);
+    return '';
+  }
+};
+
+// Componente optimizado para renderizar imágenes con fallback
+const SafeImage = ({ 
+  source, 
+  fallbackSource = DEFAULT_IMAGE,
+  style,
+  resizeMode = "cover",
+  onError,
+  imageKey
+}: { 
+  source: any, 
+  fallbackSource?: any,
+  style: any,
+  resizeMode?: "cover" | "contain" | "stretch" | "repeat" | "center",
+  onError?: () => void,
+  imageKey?: string | number
+}) => {
+  const [hasError, setHasError] = useState(false);
+  
+  // Si la fuente es una URL y ya sabemos que falla, mostrar directamente el fallback
+  const isRemoteSource = source && typeof source === 'object' && source.uri;
+  const sourceUri = isRemoteSource ? source.uri : null;
+  const useDirectFallback = isRemoteSource && ImageCache.hasFailed(sourceUri);
+  
+  if (useDirectFallback) {
+    return <Image source={fallbackSource} style={style} resizeMode={resizeMode} />;
+  }
+  
+  return (
+    <ImageBackground
+      source={fallbackSource}
+      style={style}
+      resizeMode={resizeMode}
+    >
+      {!hasError && isRemoteSource && (
+        <Image 
+          source={source}
+          style={[style, { position: 'absolute', top: 0, left: 0 }]}
+          resizeMode={resizeMode}
+          onError={() => {
+            setHasError(true);
+            if (sourceUri) {
+              ImageCache.markAsFailed(sourceUri);
+            }
+            if (onError) onError();
+          }}
+          onLoad={() => {
+            if (sourceUri) {
+              ImageCache.markAsValid(sourceUri);
+            }
+          }}
+        />
+      )}
+    </ImageBackground>
+  );
+};
+
+// Nuevo componente UserAvatar con indicador de autenticación elegante
+const UserAvatar = ({ 
+  isAuthenticated, 
+  userData, 
+  onPress 
+}: { 
+  isAuthenticated: boolean, 
+  userData: { nombre?: string, email?: string } | null,
+  onPress: () => void 
+}) => {
+  // Animación para el efecto de brillo
+  const shineAnim = useRef(new Animated.Value(0)).current;
+  
+  // Animación al autenticar
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Crear efecto de brillo al autenticar
+      Animated.loop(
+        Animated.timing(shineAnim, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        })
+      ).start();
+      
+      // Detener la animación después de unos segundos
+      const timer = setTimeout(() => {
+        shineAnim.stopAnimation();
+        shineAnim.setValue(0);
+      }, 3000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated]);
+
+  // Función para obtener nombre corto del usuario
+  const getShortName = () => {
+    if (!userData || !userData.nombre) return '';
+    
+    // Dividir el nombre y obtener la primera palabra (primer nombre)
+    const firstName = userData.nombre.split(' ')[0];
+    
+    // Si es demasiado largo, acortarlo
+    return firstName.length > 8 ? firstName.substring(0, 8) + '...' : firstName;
+  };
+  
+  return (
+    <TouchableOpacity 
+      style={[styles.userAvatarContainer, isAuthenticated && styles.userAvatarAuthenticated]}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      {/* Efecto de brillo cuando está autenticado */}
+      {isAuthenticated && (
+        <Animated.View 
+          style={[
+            styles.avatarShineEffect,
+            {
+              opacity: shineAnim.interpolate({
+                inputRange: [0, 0.5, 1],
+                outputRange: [0, 0.6, 0],
+              }),
+              transform: [{
+                translateX: shineAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-50, 70],
+                }),
+              }],
+            }
+          ]}
+        />
+      )}
+      
+      {/* Icono o indicador de usuario */}
+      <View style={styles.userAvatarIconContainer}>
+        <FontAwesome5 
+          name="user" 
+          size={isAuthenticated ? 16 : 18} 
+          color={isAuthenticated ? "#333" : "#666"} 
+          solid={isAuthenticated}
+        />
+      </View>
+      
+      {/* Nombre del usuario o texto "Mi Cuenta" */}
+      {isAuthenticated ? (
+        <Text style={styles.userAvatarText}>
+          {getShortName()}
+        </Text>
+      ) : (
+        <Text style={styles.userAvatarText}>Mi Cuenta</Text>
+      )}
+      
+      {/* Indicador de estado de autenticación */}
+      {isAuthenticated && (
+        <View style={styles.authIndicator} />
+      )}
+    </TouchableOpacity>
+  );
+};
+
 const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => {
   const [images, setImages] = useState<ImageData[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedImage, setSelectedImage] = useState<ImageData | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [imageErrors, setImageErrors] = useState<{[key: number]: boolean}>({});
 
   useEffect(() => {
     const fetchImages = async () => {
       try {
-        const response = await axios.get('http://ohanatienda.ddns.net:8000/api/productos/imagenes');
-        const processedImages = response.data.map((img: ImageData) => ({
-          ...img,
-          imagen: `http://ohanatienda.ddns.net:8000/uploads/productos/${img.imagen.split('/').pop()}`
-        }));
-        setImages(processedImages);
-        setLoading(false);
+        const response = await axios.get(`${API_BASE_URL}/api/productos/imagenes`);
+        if (response.data && Array.isArray(response.data)) {
+          const processedImages = response.data.map((img: ImageData) => {
+            // Extraer solo el nombre del archivo de la ruta
+            const imageName = img.imagen ? img.imagen.split('/').pop() : '';
+            return {
+              ...img,
+              imagen: normalizeImageUrl(`/uploads/productos/${imageName}`)
+            };
+          });
+          setImages(processedImages);
+        } else {
+          throw new Error('Formato de respuesta inválido');
+        }
       } catch (error) {
-        console.error('Error fetching images:', error);
+        console.error('Error obteniendo imágenes del carrusel:', error);
+        // Usar placeholders como fallback
+        setImages([
+          { id: 1, nombre: 'Producto destacado', imagen: '' },
+          { id: 2, nombre: 'Oferta especial', imagen: '' },
+        ]);
+      } finally {
         setLoading(false);
       }
     };
@@ -99,7 +348,18 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
     fetchImages();
   }, []);
 
-  //efecto para que el carrusel cambie de imagen cada 3 segundos
+  // Manejar errores de carga de imagen
+  const handleImageError = (imageId: number) => {
+    // Si ya registramos este error, no hacer nada
+    if (!imageErrors[imageId]) {
+      console.warn(`Error en imagen del carrusel ID: ${imageId}`);
+      
+      // Marcar esta imagen como errónea
+      setImageErrors(prev => ({ ...prev, [imageId]: true }));
+    }
+  };
+
+  // Efecto para que el carrusel cambie de imagen cada 4 segundos
   useEffect(() => {
     if (!loading && images.length > 0) {
       const containerWidth = width - 30; // Ancho real del contenedor
@@ -112,7 +372,7 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
           });
           return nextIndex;
         });
-      }, 4000); //cambiar imagen cada 4 segundos
+      }, 4000);
 
       return () => clearInterval(timer);
     }
@@ -120,56 +380,67 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
 
   return (
     <View style={styles.carruselWrapper}>
-      <ScrollView 
-        ref={scrollRef}
-        horizontal 
-        pagingEnabled 
-        showsHorizontalScrollIndicator={false} 
-        style={styles.carruselContainer}
-        onMomentumScrollEnd={(event) => {
-          const containerWidth = width - 30;
-          const newIndex = Math.round(event.nativeEvent.contentOffset.x / containerWidth);
-          setCurrentIndex(newIndex);
-        }}
-      >
-        {images.map((image) => (
-          <TouchableOpacity 
-            key={image.id} 
-            style={styles.imageContainer}
-            onPress={() => {
-              setSelectedImage(image);
-              setModalVisible(true);
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#000" />
+          <Text style={styles.loadingText}>Cargando imágenes...</Text>
+        </View>
+      ) : (
+        <>
+          <ScrollView 
+            ref={scrollRef}
+            horizontal 
+            pagingEnabled 
+            showsHorizontalScrollIndicator={false} 
+            style={styles.carruselContainer}
+            onMomentumScrollEnd={(event) => {
+              const containerWidth = width - 30;
+              const newIndex = Math.round(event.nativeEvent.contentOffset.x / containerWidth);
+              setCurrentIndex(newIndex);
             }}
           >
-            <Image 
-              source={{ uri: image.imagen }}
-              style={styles.carruselImage} 
-            />
-            <View style={styles.imageOverlay}>
-              <Text style={styles.imageTitle}>{image.nombre}</Text>             
-            </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-      <View style={styles.paginationContainer}>
-        {images.map((_, index) => (
-          <View
-            key={index}
-            style={[
-              styles.paginationDot,
-              index === currentIndex && styles.paginationDotActive
-            ]}
-          />
-        ))}
-      </View>
+            {images.map((image) => (
+              <TouchableOpacity 
+                key={image.id} 
+                style={styles.imageContainer}
+                onPress={() => {
+                  setSelectedImage(image);
+                  setModalVisible(true);
+                }}
+              >
+                <SafeImage
+                  source={{ uri: image.imagen }}
+                  fallbackSource={DEFAULT_IMAGE}
+                  style={styles.carruselImage}
+                  resizeMode="cover"
+                  onError={() => handleImageError(image.id)}
+                  imageKey={image.id}
+                />
+                <View style={styles.imageOverlay}>
+                  <Text style={styles.imageTitle}>{image.nombre}</Text>             
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <View style={styles.paginationContainer}>
+            {images.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.paginationDot,
+                  index === currentIndex && styles.paginationDotActive
+                ]}
+              />
+            ))}
+          </View>
+        </>
+      )}
 
       <Modal
         animationType="fade"
         transparent={true}
         visible={modalVisible}
-        onRequestClose={() => {
-          setModalVisible(!modalVisible);
-        }}
+        onRequestClose={() => setModalVisible(false)}
       >
         <Pressable 
           style={styles.modalOverlay}
@@ -177,10 +448,13 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
         >
           <View style={styles.modalContent}>
             {selectedImage && (
-              <Image
+              <SafeImage
                 source={{ uri: selectedImage.imagen }}
+                fallbackSource={DEFAULT_IMAGE}
                 style={styles.enlargedImage}
                 resizeMode="contain"
+                onError={() => handleImageError(selectedImage.id)}
+                imageKey={selectedImage.id}
               />
             )}
             <Text style={styles.enlargedImageTitle}>{selectedImage?.nombre}</Text>
@@ -203,13 +477,18 @@ const HomeScreen = () => {
   const [lastRotationDate, setLastRotationDate] = useState<string | null>(null);
   const [isAutoScrollingCategories, setIsAutoScrollingCategories] = useState(false);
   const [isAutoScrollingProducts, setIsAutoScrollingProducts] = useState(false);
+  const [productImageErrors, setProductImageErrors] = useState<{[key: number]: boolean}>({});
   
   // Estados para la búsqueda
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const searchTimeout = useRef<NodeJS.Timeout | null>(null);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Estados para el usuario
+  const [userData, setUserData] = useState<{ nombre?: string, email?: string } | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
    
   const router = useRouter();
   const mainScrollRef = useRef<ScrollView>(null);
@@ -217,58 +496,125 @@ const HomeScreen = () => {
   const productsScrollRef = useRef<ScrollView>(null);
   const carruselScrollRef = useRef<ScrollView>(null);
 
-  // Función para buscar productos
-  // Modificar la función searchProducts en index.tsx
-const searchProducts = async (query: string) => {
-  if (!query || query.trim() === '') {
-    setSearchResults([]);
-    setShowResults(false);
-    return;
-  }
-  
-  setIsSearching(true);
-  setShowResults(true);
-  
-  try {
-    // Busca tanto en productos de hombre como de mujer
-    const response = await axios.get(`http://ohanatienda.ddns.net:8000/api/productos/buscar?q=${encodeURIComponent(query)}`);
-    
-    if (response.data && Array.isArray(response.data)) {
-      const formattedResults = response.data.map((product: any) => ({
-        ...product,
-        imagen_url: `http://ohanatienda.ddns.net:8000/${product.imagen}`
-      }));
-      setSearchResults(formattedResults);
-    } else {
+  // Verificación de autenticación mejorada
+  useFocusEffect(
+    React.useCallback(() => {
+      // Verificar autenticación
+      const checkUserAuthentication = async () => {
+        try {
+          console.log("Verificando autenticación...");
+          const token = await AsyncStorage.getItem('userToken');
+          const userDataStr = await AsyncStorage.getItem('userData');
+          
+          if (token && userDataStr) {
+            try {
+              const userDataObj = JSON.parse(userDataStr);
+              console.log("Datos de usuario encontrados:", userDataObj);
+              setUserData(userDataObj);
+              setIsAuthenticated(true);
+            } catch (parseError) {
+              console.error("Error al analizar datos de usuario:", parseError);
+              setIsAuthenticated(false);
+              setUserData(null);
+            }
+          } else {
+            console.log("No se encontró token o datos de usuario");
+            setIsAuthenticated(false);
+            setUserData(null);
+          }
+        } catch (error) {
+          console.error('Error al verificar autenticación:', error);
+          setIsAuthenticated(false);
+          setUserData(null);
+        }
+      };
+      
+      checkUserAuthentication();
+      
+      // Limpiar caché de imágenes al volver a la pantalla
+      ImageCache.reset();
+      setProductImageErrors({});
+      
+      // Resto del código existente
+      mainScrollRef.current?.scrollTo({ y: 0, animated: false });
+      
+      if (categories.length > 0) {
+        setTimeout(() => {
+          categoriesScrollRef.current?.scrollTo({ 
+            x: calculateScrollOffset(categories.length), 
+            animated: false 
+          });
+        }, 100);
+      }
+      
+      if (products.length > 0) {
+        setTimeout(() => {
+          productsScrollRef.current?.scrollTo({ 
+            x: calculateScrollOffset(products.length, 160 + 16), 
+            animated: false 
+          });
+        }, 100);
+      }
+      
+      // Reset search state
+      setSearchQuery('');
       setSearchResults([]);
-    }
-  } catch (error) {
-    console.error('Error searching products:', error);
-    setSearchResults([]);
-    
-    // Mostrar mensaje al usuario
-    Alert.alert(
-      "Error de búsqueda",
-      "No se pudo conectar con el servidor. Por favor, intenta más tarde.",
-      [{ text: "OK" }]
-    );
-  } finally {
-    setIsSearching(false);
-  }
-};
+      setShowResults(false);
+      
+    }, [categories, products])
+  );
 
-// Función para manejar la navegación al seleccionar un producto desde búsqueda
-const handleProductSelect = (product: SearchResult) => {
-  Keyboard.dismiss();
-  setShowResults(false);
-  setSearchQuery('');
-  
-  // Navegar a la página de detalles del producto
-  router.push({
-    pathname: '/detalles',
-    params: { id: product.id.toString() }
-  });
-};
+  // Función para buscar productos
+  const searchProducts = async (query: string) => {
+    if (!query || query.trim() === '') {
+      setSearchResults([]);
+      setShowResults(false);
+      return;
+    }
+    
+    setIsSearching(true);
+    setShowResults(true);
+    
+    try {
+      // Busca tanto en productos de hombre como de mujer
+      const response = await axios.get(`${API_BASE_URL}/api/productos/buscar?q=${encodeURIComponent(query)}`);
+      
+      if (response.data && Array.isArray(response.data)) {
+        const formattedResults = response.data.map((product: any) => ({
+          ...product,
+          imagen_url: normalizeImageUrl(product.imagen)
+        }));
+        setSearchResults(formattedResults);
+      } else {
+        setSearchResults([]);
+      }
+    } catch (error) {
+      console.error('Error buscando productos:', error);
+      setSearchResults([]);
+      
+      // Mostrar mensaje al usuario
+      Alert.alert(
+        "Error de búsqueda",
+        "No se pudo conectar con el servidor. Por favor, intenta más tarde.",
+        [{ text: "OK" }]
+      );
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Función para manejar la navegación al seleccionar un producto desde búsqueda
+  const handleProductSelect = (product: SearchResult) => {
+    Keyboard.dismiss();
+    setShowResults(false);
+    setSearchQuery('');
+    
+    // Navegar a la página de detalles del producto
+    router.push({
+      pathname: '/detalles',
+      params: { id: product.id.toString() }
+    });
+  };
   
   // Función para manejar cambios en la búsqueda con debounce
   const handleSearchChange = (text: string) => {
@@ -299,50 +645,27 @@ const handleProductSelect = (product: SearchResult) => {
     };
   }, []);
 
-  // Reset all scrolls when returning to the page
-  useFocusEffect(
-    React.useCallback(() => {
-      mainScrollRef.current?.scrollTo({ y: 0, animated: false });
+  // Función optimizada para obtener imágenes por categoría
+  const getCategoryImage = (categoryName: string) => {
+    try {
+      if (!categoryName) return DEFAULT_IMAGE;
       
-      // Scrolls para los nuevos ScrollViews infinitos
-      if (categories.length > 0) {
-        // Inicio en la posición central (los elementos originales)
-        setTimeout(() => {
-          categoriesScrollRef.current?.scrollTo({ 
-            x: calculateScrollOffset(categories.length), 
-            animated: false 
-          });
-        }, 100);
+      // Convertir a minúsculas para comparación sin distinción de mayúsculas/minúsculas
+      const name = categoryName.toLowerCase();
+      
+      // Buscar coincidencia en las claves del objeto CATEGORY_IMAGES
+      for (const key of Object.keys(CATEGORY_IMAGES)) {
+        if (name.includes(key)) {
+          return CATEGORY_IMAGES[key as keyof typeof CATEGORY_IMAGES];
+        }
       }
       
-      if (products.length > 0) {
-        setTimeout(() => {
-          productsScrollRef.current?.scrollTo({ 
-            x: calculateScrollOffset(products.length, 160 + 16), 
-            animated: false 
-          });
-        }, 100);
-      }
-      
-      // Reset search state
-      setSearchQuery('');
-      setSearchResults([]);
-      setShowResults(false);
-    }, [categories, products])
-  );
-
-  // Imágenes para las categorías
-  const categoryImages: CategoryImages = {
-    'Bolsos': require('@/assets/images/bolso.jpg'),
-    'Faldas': require('@/assets/images/falda.jpg'),
-    'Jerseys': require('@/assets/images/camisa1.jpg'),
-    'Camisetas': require('@/assets/images/camiseta1.jpg'),
-    'Pantalones': require('@/assets/images/pantalon1.jpg'),
-    'Vestidos': require('@/assets/images/falda1.jpg'),
-    'Abrigos': require('@/assets/images/camisa1.jpg'),
-    'Zapatos': require('@/assets/images/accesorio1.jpg'),
-    'Accesorios': require('@/assets/images/accesorio.jpg'),
-    'Chaquetas': require('@/assets/images/chaqueta.jpg'),
+      // Default image si no coincide con ninguna categoría conocida
+      return DEFAULT_IMAGE;
+    } catch (error) {
+      console.error(`Error cargando imagen para categoría '${categoryName}':`, error);
+      return DEFAULT_IMAGE;
+    }
   };
 
   // Función para calcular el offset de desplazamiento
@@ -459,19 +782,17 @@ const handleProductSelect = (product: SearchResult) => {
 
   const fetchCategories = async () => {
     try {
-      console.log('Fetching categories...');
-      const response = await axios.get('http://ohanatienda.ddns.net:8000/api/categorias');
-      console.log('Categories response:', response.data);
+      console.log('Obteniendo categorías...');
+      const response = await axios.get(`${API_BASE_URL}/api/categorias`);
       
       if (response.data && Array.isArray(response.data)) {
-        console.log('Setting categories:', response.data);
         setCategories(response.data);
       } else {
-        console.error('Invalid response format:', response.data);
+        console.error('Formato de respuesta inválido:', response.data);
         setErrorCategories('Formato de respuesta inválido');
       }
     } catch (error) {
-      console.error('Error fetching categories:', error);
+      console.error('Error obteniendo categorías:', error);
       setErrorCategories('Error al cargar las categorías');
     } finally {
       setLoadingCategories(false);
@@ -479,7 +800,13 @@ const handleProductSelect = (product: SearchResult) => {
   };
 
   const formatPrice = (price: string) => {
-    return `${parseFloat(price).toFixed(2)} €`;
+    try {
+      const numPrice = parseFloat(price);
+      if (isNaN(numPrice)) return '0.00 €';
+      return `${numPrice.toFixed(2)} €`;
+    } catch (e) {
+      return '0.00 €';
+    }
   };
 
   const shouldRotateProducts = () => {
@@ -491,40 +818,41 @@ const handleProductSelect = (product: SearchResult) => {
   };
 
   const rotateProducts = (allProducts: Product[]) => {
+    if (!allProducts || allProducts.length === 0) return [];
+    
     const now = new Date();
     const dayOfYear = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-    const startIndex = dayOfYear % allProducts.length;
+    const startIndex = dayOfYear % Math.max(1, allProducts.length);
+    
     return [
-      ...allProducts.slice(startIndex, startIndex + 3),
+      ...allProducts.slice(startIndex, Math.min(startIndex + 3, allProducts.length)),
       ...allProducts.slice(0, Math.max(0, 3 - (allProducts.length - startIndex)))
-    ];
+    ].filter(product => product); // Filtrar undefined/null
   };
 
   const fetchProducts = async () => {
     try {
-      console.log('Fetching products...');
-      const response = await axios.get('http://ohanatienda.ddns.net:8000/api/productos');
-      console.log('Products response:', response.data);
+      console.log('Obteniendo productos...');
+      const response = await axios.get(`${API_BASE_URL}/api/productos`);
       
-      if (response.data && response.data.data) {
+      if (response.data && response.data.data && Array.isArray(response.data.data)) {
         const allProducts = response.data.data;
         if (shouldRotateProducts()) {
           const rotatedProducts = rotateProducts(allProducts);
-          console.log('Setting rotated products:', rotatedProducts);
           setProducts(rotatedProducts);
           setLastRotationDate(new Date().toISOString());
         } else {
           // Si no es hora de rotar, mantener los productos actuales
           if (products.length === 0) {
-            setProducts(allProducts.slice(0, 3));
+            setProducts(allProducts.slice(0, Math.min(3, allProducts.length)));
           }
         }
       } else {
-        console.error('Invalid response format:', response.data);
+        console.error('Formato de respuesta inválido:', response.data);
         setErrorProducts('Formato de respuesta inválido');
       }
     } catch (error) {
-      console.error('Error fetching products:', error);
+      console.error('Error obteniendo productos:', error);
       setErrorProducts('Error al cargar los productos');
     } finally {
       setLoadingProducts(false);
@@ -536,11 +864,19 @@ const handleProductSelect = (product: SearchResult) => {
     fetchProducts();
   }, []);
 
+  // Manejar errores de carga de imagen para productos
+  const handleProductImageError = (productId: number) => {
+    if (!productImageErrors[productId]) {
+      console.warn(`Error en imagen de producto ID: ${productId}`);
+      setProductImageErrors(prev => ({ ...prev, [productId]: true }));
+    }
+  };
+
   const handleCategoryPress = (categoryName: string, categoryId: number) => {
-    console.log(`Navegando a categoría: ${categoryName} (ID: ${categoryId}) con timestamp: ${Date.now()}`);
-    // Navegar a la pantalla de tienda con parámetros de categoría y un timestamp
+    console.log(`Navegando a categoría: ${categoryName} (ID: ${categoryId})`);
+    // Navegar a la pantalla de tienda con parámetros de categoría
     router.push({
-      pathname: '/detalles',
+      pathname: '/(tabs)/tienda',
       params: { 
         categoryId: categoryId,
         categoryName: categoryName,
@@ -549,14 +885,26 @@ const handleProductSelect = (product: SearchResult) => {
     });
   };
 
-// Función para manejar el clic en productos destacados
-const handleProductPress = (product: Product) => {
-  // Navegar a la página de detalles del producto
-  router.push({
-    pathname: '/(tabs)/tienda',
-    params: { id: product.id.toString() }
-  });
-};
+  // Función para manejar el clic en productos destacados
+  const handleProductPress = (product: Product) => {
+    // Navegar a la página de detalles del producto
+    router.push({
+      pathname: '/detalles',
+      params: { id: product.id.toString() }
+    });
+  };
+
+  // Función para manejar la navegación al perfil del usuario de forma segura
+  const handleProfileNavigation = () => {
+    // Si está autenticado, ir directamente a la página de usuario
+    if (isAuthenticated) {
+      console.log("Navegando a usuario-perfil");
+      router.push('/usuario-perfil');
+    } else {
+      console.log("Navegando a perfil (login)");
+      router.push('/perfil');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -578,7 +926,7 @@ const handleProductPress = (product: Product) => {
               <FontAwesome5 name="search" size={16} color="#666" style={styles.searchIcon} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Buscar productos..."
+                placeholder="Buscar productos"
                 placeholderTextColor="#666"
                 value={searchQuery}
                 onChangeText={handleSearchChange}
@@ -601,12 +949,13 @@ const handleProductPress = (product: Product) => {
                 </TouchableOpacity>
               )}
             </View>
-            <TouchableOpacity 
-              style={styles.userIconContainer}
-              onPress={() => router.push('/(tabs)/perfil')}
-            >
-              <FontAwesome5 name="user-circle" size={28} color="#333" />
-            </TouchableOpacity>
+            
+            {/* Nuevo componente UserAvatar reemplaza el avatar anterior */}
+            <UserAvatar 
+              isAuthenticated={isAuthenticated}
+              userData={userData}
+              onPress={handleProfileNavigation}
+            />
           </View>
           
           {/* Resultados de búsqueda */}
@@ -625,27 +974,32 @@ const handleProductPress = (product: Product) => {
                 <FlatList
                   data={searchResults.slice(0, 6)} // Mostrar máximo 6 resultados
                   keyExtractor={(item) => item.id.toString()}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={styles.searchResultItem}
-                      onPress={() => handleProductSelect(item)}
-                    >
-                      <Image 
-                        source={{ uri: item.imagen_url || `http://ohanatienda.ddns.net:8000/${item.imagen}` }}
-                        style={styles.searchResultImage}
-                        resizeMode="cover"
-                      />
-                      <View style={styles.searchResultInfo}>
-                        <Text style={styles.searchResultName} numberOfLines={1}>
-                          {item.nombre}
-                        </Text>
-                        <Text style={styles.searchResultPrice}>
-                          {formatPrice(item.precio)}
-                        </Text>
-                      </View>
-                      <FontAwesome5 name="chevron-right" size={12} color="#999" />
-                    </TouchableOpacity>
-                  )}
+                  renderItem={({ item }) => {
+                    const imageUrl = item.imagen_url || normalizeImageUrl(item.imagen);
+                    
+                    return (
+                      <TouchableOpacity
+                        style={styles.searchResultItem}
+                        onPress={() => handleProductSelect(item)}
+                      >
+                        <SafeImage
+                          source={{ uri: imageUrl }}
+                          style={styles.searchResultImage}
+                          resizeMode="cover"
+                          imageKey={`search-${item.id}`}
+                        />
+                        <View style={styles.searchResultInfo}>
+                          <Text style={styles.searchResultName} numberOfLines={1}>
+                            {item.nombre}
+                          </Text>
+                          <Text style={styles.searchResultPrice}>
+                            {formatPrice(item.precio)}
+                          </Text>
+                        </View>
+                        <FontAwesome5 name="chevron-right" size={12} color="#999" />
+                      </TouchableOpacity>
+                    );
+                  }}
                   style={styles.searchResultsList}
                   showsVerticalScrollIndicator={false}
                   ListFooterComponent={
@@ -696,7 +1050,7 @@ const handleProductPress = (product: Product) => {
           }}
         >
           {/* Carrusel */}
-          <Carrusel scrollRef={carruselScrollRef} />
+          <Carrusel scrollRef={carruselScrollRef as React.RefObject<ScrollView>} />
 
           {/* Sección de Categorías */}
           <View style={styles.sectionContainer}>
@@ -721,6 +1075,7 @@ const handleProductPress = (product: Product) => {
                   onPress={() => {
                     setLoadingCategories(true);
                     setErrorCategories(null);
+                    ImageCache.reset(); // Resetear caché al reintentar
                     fetchCategories();
                   }}
                 >
@@ -748,13 +1103,15 @@ const handleProductPress = (product: Product) => {
                   >
                     <View style={styles.categoryImageWrapper}>
                       <Image 
-                        source={categoryImages[category.nombre_cat] || require('@/assets/images/camiseta1.jpg')} 
+                        source={getCategoryImage(category.nombre_cat)} 
                         style={styles.categoryImage}
                         resizeMode="cover"
                       />
                       <View style={styles.categoryOverlay} />
                     </View>
-                    <Text style={styles.categoryName}>{category.nombre_cat}</Text>
+                    <Text style={styles.categoryName} numberOfLines={1}>
+                      {category.nombre_cat}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -784,6 +1141,7 @@ const handleProductPress = (product: Product) => {
                   onPress={() => {
                     setLoadingProducts(true);
                     setErrorProducts(null);
+                    ImageCache.reset(); // Resetear caché al reintentar
                     fetchProducts();
                   }}
                 >
@@ -809,14 +1167,20 @@ const handleProductPress = (product: Product) => {
                     style={styles.productItem}
                     onPress={() => handleProductPress(product)}
                   >
-                    <Image 
-                      source={{ uri: `http://ohanatienda.ddns.net:8000/${product.imagen}` }}
+                    <SafeImage 
+                      source={{ uri: normalizeImageUrl(product.imagen) }}
                       style={styles.productImage}
                       resizeMode="cover"
+                      onError={() => handleProductImageError(product.id)}
+                      imageKey={`product-${product.id}`}
                     />
                     <View style={styles.productInfo}>
-                      <Text style={styles.productName}>{product.nombre}</Text>
-                      <Text style={styles.productPrice}>{formatPrice(product.precio)}</Text>
+                      <Text style={styles.productName} numberOfLines={1}>
+                        {product.nombre}
+                      </Text>
+                      <Text style={styles.productPrice}>
+                        {formatPrice(product.precio)}
+                      </Text>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -888,19 +1252,58 @@ const styles = StyleSheet.create({
   clearButton: {
     padding: 5,
   },
-  userIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  // NUEVOS ESTILOS PARA EL AVATAR DE USUARIO
+  userAvatarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#f5f5f5',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    height: 36,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  userAvatarAuthenticated: {
+    backgroundColor: '#f0f7ff',
+    borderWidth: 1,
+    borderColor: '#cce5ff',
+  },
+  userAvatarIconContainer: {
+    marginRight: 6,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  userAvatarText: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '500',
+  },
+  authIndicator: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#4CAF50',
+  },
+  avatarShineEffect: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    backgroundColor: 'white',
+    transform: [{ rotate: '45deg' }],
   },
   mainScrollView: {
     flex: 1,
   },
   scrollContent: {
     paddingTop: 60,
+    paddingBottom: 20,
   },
   // Estilos para los resultados de búsqueda
   searchResultsContainer: {
@@ -1014,6 +1417,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+    backgroundColor: '#f0f0f0',
   },
   imageOverlay: {
     position: 'absolute',
@@ -1083,6 +1487,7 @@ const styles = StyleSheet.create({
     height: 160,
     borderRadius: 8,
     marginBottom: 8,
+    backgroundColor: '#f0f0f0',
   },
   productInfo: {
     padding: 5,
@@ -1202,6 +1607,7 @@ const styles = StyleSheet.create({
   categoryImage: {
     width: '100%',
     height: '100%',
+    backgroundColor: '#f0f0f0',
   },
   categoryOverlay: {
     position: 'absolute',
