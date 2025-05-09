@@ -151,7 +151,7 @@ const normalizeImageUrl = (imageUrl: string): string => {
     return '';
   }
 };
-
+ 
 // Componente optimizado para renderizar imágenes con fallback
 const SafeImage = ({ 
   source, 
