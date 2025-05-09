@@ -145,7 +145,7 @@ const normalizeImageUrl = (imageUrl: string): string => {
     const path = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
     
     // Construir URL completa
-    return `${API_BASE_URL}${path}`;
+    return `${API_BASE_URL}${path}`; 
   } catch (error) {
     console.error('Error normalizando URL:', error, 'URL original:', imageUrl);
     return '';
