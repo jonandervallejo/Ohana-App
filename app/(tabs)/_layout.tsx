@@ -14,15 +14,17 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: Colors[colorScheme ?? 'dark'].background, // color de los íconos activos
         headerShown: false,
         tabBarButton: HapticTab,
-        tabBarBackground: TabBarBackground,
         tabBarStyle: Platform.select({
           ios: {
             position: 'absolute',
+            backgroundColor: Colors[colorScheme ?? 'light'].tint, // color de fondo en iOS
           },
-          default: {},
+          default: {
+            backgroundColor: Colors[colorScheme ?? 'light'].tint, // color de fondo en Android u otras plataformas
+          },
         }),
       }}>
         
@@ -57,4 +59,5 @@ export default function TabLayout() {
       />
     </Tabs>
   );
+  
 }

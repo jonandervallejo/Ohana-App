@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -19,7 +19,7 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import axios from 'axios';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import { useFavoritos } from '../hooks/useFavoritos';
 
 type Gender = 'hombre' | 'mujer' | null;
 
@@ -41,6 +41,7 @@ interface Category {
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 45) / 2;
+const API_BASE_URL = 'http://ohanatienda.ddns.net:8000';
 
 export default function TiendaScreen() {
   const params = useLocalSearchParams();
@@ -52,7 +53,6 @@ export default function TiendaScreen() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [favorites, setFavorites] = useState<number[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMoreProducts, setHasMoreProducts] = useState(true);
   const [displayedProducts, setDisplayedProducts] = useState<Product[]>([]);
@@ -69,92 +69,58 @@ export default function TiendaScreen() {
   const [isLoadingAllProducts, setIsLoadingAllProducts] = useState(false);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [isChangingCategory, setIsChangingCategory] = useState(false);
+  const [paramsProcessed, setParamsProcessed] = useState(false);
+  
+  // Usar el hook de favoritos
+  const { favoritos, loading: loadingFavoritos, esFavorito, toggleFavorito } = useFavoritos();
 
   const availableSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
-  // Cargar parámetros de categoría al iniciar
-  useEffect(() => {
-    if (params.categoryId) {
-      setSelectedCategoryId(Number(params.categoryId));
-    }
-    if (params.categoryName) {
-      const categoryName = params.categoryName as string;
-      setSelectedCategoryName(categoryName);
-      
-      // Agregar la categoría a los filtros seleccionados
-      setSelectedFilters(prev => ({
-        ...prev,
-        categories: [categoryName]
-      }));
-      
-      // Si tenemos el filtro de categoría, auto-expandirlo para que sea visible
-      setExpandedFilter('Categoría');
-    }
-  }, [params]);
-  
-
+  // Verificar estado de sesión
   const checkLoginStatus = async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       setIsLoggedIn(!!token);
-      if (token) {
-        loadFavorites();
-      }
     } catch (error) {
       console.error('Error checking login status:', error);
     }
   };
 
-  const loadFavorites = async () => {
+  // Función para manejar favoritos que usa el hook personalizado
+  const handleToggleFavorite = async (productId: number) => {
     try {
-      const storedFavorites = await AsyncStorage.getItem('favorites');
-      if (storedFavorites) {
-        setFavorites(JSON.parse(storedFavorites));
+      if (!isLoggedIn) {
+        Alert.alert(
+          '⭐ Favoritos',
+          'Para añadir productos a favoritos primero deberás de iniciar sesión.',
+          [
+            { 
+              text: 'Más tarde', 
+              style: 'cancel'
+            },
+            { 
+              text: 'Iniciar sesión', 
+              style: 'default',
+              onPress: () => router.push('/perfil')
+            },
+          ],
+          { cancelable: true }
+        );
+        return;
       }
+  
+      // Si está logueado, toggle favorito directamente
+      await toggleFavorito(productId);
     } catch (error) {
-      console.error('Error loading favorites:', error);
-    }
-  };
-
-  const toggleFavorite = async (productId: number) => {
-    if (!isLoggedIn) {
-      Alert.alert(
-        '⭐ Favoritos',
-        'Inicia sesión para guardar tus productos favoritos y acceder a todas las funcionalidades de la tienda.',
-        [
-          { 
-            text: 'Más tarde', 
-            style: 'cancel',
-            onPress: () => console.log('Cancelar presionado')
-          },
-          { 
-            text: 'Iniciar sesión', 
-            style: 'default',
-            onPress: () => router.push('/(tabs)/perfil')
-          }
-        ],
-        { cancelable: true }
-      );
-      return;
-    }
-
-    try {
-      let newFavorites;
-      if (favorites.includes(productId)) {
-        newFavorites = favorites.filter(id => id !== productId);
-      } else {
-        newFavorites = [...favorites, productId];
-      }
-      setFavorites(newFavorites);
-      await AsyncStorage.setItem('favorites', JSON.stringify(newFavorites));
-    } catch (error) {
-      console.error('Error toggling favorite:', error);
+      console.error('Error al gestionar favorito:', error);
+      Alert.alert('Error', 'No se pudo actualizar el favorito');
     }
   };
 
   // Resetear estado cuando se sale de la página
   useFocusEffect(
     React.useCallback(() => {
+      // Reset de estados
       setSelectedGender(null);
       setShowFilters(false);
       setProducts([]);
@@ -162,36 +128,80 @@ export default function TiendaScreen() {
       setSearchQuery('');
       setAllProducts([]);
       setFilteredProducts([]);
+      setDisplayedProducts([]);
       setSelectedFilters({
         priceRange: { min: '', max: '' },
         sizes: [],
         categories: [],
       });
       setExpandedFilter(null);
+      setParamsProcessed(false);
       
-      // Conservamos los valores de categoría si vienen como parámetros
-      if (params.categoryId) {
-        setSelectedCategoryId(Number(params.categoryId));
-      }
-      if (params.categoryName) {
-        const categoryName = params.categoryName as string;
-        setSelectedCategoryName(categoryName);
-        setSelectedFilters(prev => ({
-          ...prev,
-          categories: [categoryName]
-        }));
-      }
+      return () => {
+        // Limpiar al salir de la pantalla
+      };
     }, [])
   );
 
   useEffect(() => {
     // Cargar el estado de login al iniciar
     checkLoginStatus();
+    // Cargar las categorías al iniciar
+    fetchCategories();
   }, []);
 
+  // Procesar parámetros de URL una sola vez
+  useEffect(() => {
+    if (paramsProcessed) return;
+    
+    try {
+      if (params.categoryId) {
+        // Convertir explícitamente a número con verificación
+        const categoryId = typeof params.categoryId === 'string' 
+          ? Number(params.categoryId) 
+          : Array.isArray(params.categoryId) 
+            ? Number(params.categoryId[0]) 
+            : null;
+        
+        if (categoryId && !isNaN(categoryId)) {
+          setSelectedCategoryId(categoryId);
+        }
+      }
+      
+      if (params.categoryName) {
+        // Asegurarse de que categoryName es string
+        const categoryName = typeof params.categoryName === 'string' 
+          ? params.categoryName 
+          : Array.isArray(params.categoryName)
+            ? params.categoryName[0]
+            : '';
+        
+        if (categoryName) {
+          setSelectedCategoryName(categoryName);
+          
+          // Actualizar filtros sólo si tenemos un nombre válido
+          setSelectedFilters(prev => ({
+            ...prev,
+            categories: [categoryName]
+          }));
+          
+          // Expandir la sección de categorías
+          setExpandedFilter('Categoría');
+        }
+      }
+    } catch (error) {
+      // Manejar cualquier error silenciosamente
+      console.error('Error processing URL parameters:', error);
+    } finally {
+      // Marcar como procesado en todos los casos
+      setParamsProcessed(true);
+    }
+  }, [params, paramsProcessed]);
+
+  // Cargar productos básica - para paginación inicial
   const fetchProducts = async (page: number = 1) => {
     try {
-      const response = await axios.get(`http://ohanatienda.ddns.net:8000/api/productos?page=${page}`);
+      const response = await axios.get(`${API_BASE_URL}/api/productos?page=${page}`);
       if (response.data && response.data.data) {
         const newProducts = response.data.data;
         if (page === 1) {
@@ -200,7 +210,6 @@ export default function TiendaScreen() {
           setDisplayedProducts(prev => [...prev, ...newProducts]);
         }
         
-        // Verificar si hay más páginas
         setHasMoreProducts(newProducts.length === 6);
       }
     } catch (error) {
@@ -227,16 +236,6 @@ export default function TiendaScreen() {
     setFilteredProducts([]);
     setAllProducts([]);
     setSearchQuery('');
-    
-    // Preservar la categoría seleccionada si viene desde home
-    if (!selectedCategoryName) {
-      setSelectedFilters({
-        priceRange: { min: '', max: '' },
-        sizes: [],
-        categories: [],
-      });
-    }
-    // No need to call loadAllProducts here, the useEffect below will handle it
   };
 
   const handleAddToCart = (product: Product) => {
@@ -253,7 +252,7 @@ export default function TiendaScreen() {
           { 
             text: 'Iniciar sesión', 
             style: 'default',
-            onPress: () => router.push('/(tabs)/perfil')
+            onPress: () => router.push('/perfil')
           }
         ],
         { cancelable: true }
@@ -264,19 +263,101 @@ export default function TiendaScreen() {
     console.log('Añadir al carrito:', product);
   };
 
-  const applyFilters = () => {
-    if (!allProducts || isChangingCategory) return;
+  // Función optimizada para cargar todos los productos
+  const loadAllProducts = useCallback(async () => {
+    if (!selectedGender) return;
+
+    setIsLoadingAllProducts(true);
+    setLoading(true);
+    
+    try {
+      // Cargar productos del género seleccionado
+      const genderResponse = await axios.get(`${API_BASE_URL}/api/productos/genero/${selectedGender}`);
+      
+      // Cargar productos unisex
+      const unisexResponse = await axios.get(`${API_BASE_URL}/api/productos/genero/unisex`);
+      
+      // Combinar resultados
+      let allProductsData: Product[] = [];
+      let hasMorePages = false;
+      
+      if (genderResponse.data && genderResponse.data.data) {
+        allProductsData = [...genderResponse.data.data];
+        hasMorePages = genderResponse.data.next_page_url !== null;
+      }
+      
+      if (unisexResponse.data && unisexResponse.data.data) {
+        const existingIds = new Set(allProductsData.map(p => p.id));
+        
+        const uniqueUnisexProducts = unisexResponse.data.data.filter(
+          (p: Product) => !existingIds.has(p.id)
+        );
+        
+        allProductsData = [...allProductsData, ...uniqueUnisexProducts];
+        hasMorePages = hasMorePages || unisexResponse.data.next_page_url !== null;
+      }
+      
+      setAllProducts(allProductsData);
+      setFilteredProducts(allProductsData); 
+      setDisplayedProducts(allProductsData);
+      setHasMoreProducts(hasMorePages && allProductsData.length >= 6);
+    } catch (error) {
+      console.error('Error loading products:', error);
+      setAllProducts([]);
+      setFilteredProducts([]);
+      setDisplayedProducts([]);
+    } finally {
+      setIsLoadingAllProducts(false);
+      setLoading(false);
+      setIsChangingCategory(false);
+    }
+  }, [selectedGender]);
+
+  // Cargar productos cuando se selecciona el género
+  useEffect(() => {
+    if (selectedGender) {
+      loadAllProducts();
+    }
+  }, [selectedGender, loadAllProducts]);
+
+  // Aplicar filtros cuando los productos están cargados y hay categoría seleccionada
+  useEffect(() => {
+    if (allProducts.length > 0 && !isChangingCategory) {
+      applyFilters();
+    }
+  }, [allProducts, selectedCategoryId, isChangingCategory]);
+
+  const handleSearch = (text: string) => {
+    setSearchQuery(text);
+  };
+
+  const applyFilters = useCallback(() => {
+    if (!allProducts.length || isChangingCategory) return;
     
     let filtered = [...allProducts];
 
-    // Aplicar filtro de búsqueda
+    // Aplicar filtros de categorías (ahora permite múltiples)
+    if (selectedFilters.categories.length > 0) {
+      filtered = filtered.filter(product => {
+        // Si hay un ID específico seleccionado, priorizar ese
+        if (selectedCategoryId !== null && product.id_categoria === selectedCategoryId) {
+          return true;
+        }
+        
+        // Para las demás categorías seleccionadas, filtrar por nombre
+        return product.categoria && 
+               selectedFilters.categories.includes(product.categoria.nombre_cat);
+      });
+    }
+
+    // Filtro de búsqueda
     if (searchQuery.trim() !== '') {
       filtered = filtered.filter(product => 
         product.nombre.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
-    // Aplicar filtro de precio
+    // Filtro de precio
     if (selectedFilters.priceRange.min !== '' || selectedFilters.priceRange.max !== '') {
       const minPrice = selectedFilters.priceRange.min ? parseFloat(selectedFilters.priceRange.min) : 0;
       const maxPrice = selectedFilters.priceRange.max ? parseFloat(selectedFilters.priceRange.max) : Infinity;
@@ -287,120 +368,27 @@ export default function TiendaScreen() {
       });
     }
 
-    // Aplicar filtro de tallas
+    // Filtro de tallas
     if (selectedFilters.sizes.length > 0) {
       filtered = filtered.filter(product => 
         product.talla && selectedFilters.sizes.includes(product.talla)
       );
     }
 
-    // Aplicar filtro de categorías
-    if (selectedFilters.categories.length > 0) {
-      filtered = filtered.filter(product => {
-        // Verificar si el producto tiene una categoría y si coincide con alguna de las seleccionadas
-        return product.categoria && selectedFilters.categories.includes(product.categoria.nombre_cat);
-      });
-    }
-
-    // Actualizar solo filteredProducts, displayedProducts se usará para resetear
+    // Actualizar productos filtrados
     setFilteredProducts(filtered);
     setDisplayedProducts(filtered);
-  };
+  }, [allProducts, searchQuery, selectedFilters, selectedCategoryId, isChangingCategory]);
 
+  // Aplicar filtros cuando cambian las condiciones
   useEffect(() => {
-    // Solo aplicar filtros si tenemos productos y no estamos cambiando categoría
     if (allProducts.length > 0 && !isChangingCategory) {
       applyFilters();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, selectedFilters.categories, selectedFilters.sizes, 
-      selectedFilters.priceRange.min, selectedFilters.priceRange.max, 
-      isChangingCategory]);
+  }, [searchQuery, selectedFilters, applyFilters, isChangingCategory]);
 
-  const loadAllProducts = async () => {
-    setIsLoadingAllProducts(true);
-    try {
-      if (!selectedGender) {
-        setAllProducts([]);
-        setDisplayedProducts([]);
-        setFilteredProducts([]);
-        return;
-      }
-  
-      // Primer carga de datos del género seleccionado
-      const genderResponse = await axios.get(`http://ohanatienda.ddns.net:8000/api/productos/genero/${selectedGender}`);
-      
-      // Segunda carga para productos unisex
-      const unisexResponse = await axios.get(`http://ohanatienda.ddns.net:8000/api/productos/genero/unisex`);
-      
-      // Combinamos los resultados de ambas llamadas
-      let allProductsData: Product[] = [];
-      let hasMorePages = false;
-      
-      // Procesamos los productos del género seleccionado
-      if (genderResponse.data && genderResponse.data.data) {
-        allProductsData = [...genderResponse.data.data];
-        hasMorePages = genderResponse.data.next_page_url !== null;
-        
-        console.log(`Productos de ${selectedGender}:`, genderResponse.data.data.length);
-      }
-      
-      // Añadimos los productos unisex
-      if (unisexResponse.data && unisexResponse.data.data) {
-        // Usamos un Set para evitar IDs duplicados
-        const existingIds = new Set(allProductsData.map(p => p.id));
-        
-        // Añadimos solo productos unisex que no estén ya incluidos
-        const uniqueUnisexProducts = unisexResponse.data.data.filter(
-          (p: Product) => !existingIds.has(p.id)
-        );
-        
-        allProductsData = [...allProductsData, ...uniqueUnisexProducts];
-        console.log('Productos unisex añadidos:', uniqueUnisexProducts.length);
-        
-        // Si cualquiera de las respuestas indica que hay más páginas
-        hasMorePages = hasMorePages || unisexResponse.data.next_page_url !== null;
-      }
-      
-      console.log('Total productos combinados:', allProductsData.length);
-      
-      // Filtrar por categoría si hay una seleccionada
-      if (selectedCategoryId !== null) {
-        allProductsData = allProductsData.filter(p => p.id_categoria === selectedCategoryId);
-        console.log(`Productos filtrados por categoría ${selectedCategoryName}:`, allProductsData.length);
-      }
-      
-      // Actualizar estados
-      setAllProducts(allProductsData);
-      setFilteredProducts(allProductsData); // Inicialmente mostramos todos los productos
-      setHasMoreProducts(hasMorePages && allProductsData.length >= 6);
-      
-    } catch (error) {
-      console.error('Error loading products:', error);
-      setAllProducts([]);
-      setDisplayedProducts([]);
-      setFilteredProducts([]);
-    } finally {
-      setIsLoadingAllProducts(false);
-      setLoading(false);
-      setIsChangingCategory(false);
-    }
-  };
-
-  useEffect(() => {
-    if (selectedGender) {
-      setLoading(true);
-      loadAllProducts();
-    }
-  }, [selectedGender]);
-
-  const handleSearch = (text: string) => {
-    setSearchQuery(text);
-    // Dejamos que el efecto de applyFilters se encargue de actualizar los filtros
-  };
-
+  // Handlers de filtros optimizados
   const toggleSize = (size: string) => {
-    // Marcar que estamos en proceso de cambio para evitar filtrados parciales
     setIsChangingCategory(true);
     
     setSelectedFilters(prev => ({
@@ -410,48 +398,49 @@ export default function TiendaScreen() {
         : [...prev.sizes, size]
     }));
     
-    // Restaurar la bandera después de un breve retraso
-    setTimeout(() => {
-      setIsChangingCategory(false);
-    }, 100);
+    setIsChangingCategory(false);
   };
 
+  // Toggle Category mejorado para permitir múltiples selecciones
   const toggleCategory = (category: string) => {
-    // Marcar que estamos cambiando categoría para evitar filtrados mientras se actualiza
     setIsChangingCategory(true);
     
-    // Si es la misma categoría que ya está seleccionada, la quitamos
-    if (selectedFilters.categories.includes(category)) {
-      setSelectedFilters(prev => ({
-        ...prev,
-        categories: []
-      }));
-      setSelectedCategoryId(null);
-      setSelectedCategoryName(null);
-    } 
-    // Si es una categoría nueva, reemplazamos la anterior
-    else {
-      const categoryObj = categories.find(c => c.nombre_cat === category);
-      setSelectedFilters(prev => ({
-        ...prev,
-        categories: [category] // Solo permitimos una categoría a la vez
-      }));
-      
-      // También actualizamos los estados de categoría
-      if (categoryObj) {
-        setSelectedCategoryId(categoryObj.id);
-        setSelectedCategoryName(category);
-      }
-    }
+    // Encontrar el objeto de categoría correspondiente
+    const categoryObj = categories.find(c => c.nombre_cat === category);
     
-    // Resetear la bandera después de un breve retraso para permitir que se apliquen los cambios
-    setTimeout(() => {
-      setIsChangingCategory(false);
-    }, 100);
+    setSelectedFilters(prev => {
+      // Si la categoría ya está seleccionada, solo la quitamos
+      if (prev.categories.includes(category)) {
+        // Si es la categoría principal, también limpiamos ese estado
+        if (selectedCategoryName === category) {
+          setSelectedCategoryName(null);
+          setSelectedCategoryId(null);
+        }
+        
+        return {
+          ...prev,
+          categories: prev.categories.filter(c => c !== category)
+        };
+      } 
+      // Añadir la nueva categoría (permitiendo múltiples)
+      else {
+        // Si es la primera categoría seleccionada, establecerla como principal también
+        if (prev.categories.length === 0 && categoryObj) {
+          setSelectedCategoryId(categoryObj.id);
+          setSelectedCategoryName(category);
+        }
+        
+        return {
+          ...prev,
+          categories: [...prev.categories, category]
+        };
+      }
+    });
+    
+    setIsChangingCategory(false);
   };
 
   const clearFilters = () => {
-    // Marcar que estamos en proceso de cambio para evitar filtrados parciales
     setIsChangingCategory(true);
     
     setSelectedFilters({
@@ -460,37 +449,26 @@ export default function TiendaScreen() {
       categories: [],
     });
     setSearchQuery('');
-    
-    // Limpiar también el ID y nombre de categoría seleccionada
     setSelectedCategoryId(null);
     setSelectedCategoryName(null);
     
-    // Resetear los productos mostrados a todos los productos disponibles
-    setTimeout(() => {
-      setFilteredProducts(allProducts);
-      setDisplayedProducts(allProducts);
-      setIsChangingCategory(false); // Restaurar la bandera después de aplicar los cambios
-    }, 100);
+    // Resetear a todos los productos
+    setFilteredProducts(allProducts);
+    setDisplayedProducts(allProducts);
+    
+    setIsChangingCategory(false);
   };
 
   const handlePriceChange = (field: 'min' | 'max', value: string) => {
-    // Marcar que estamos en proceso de cambio para evitar filtrados parciales
-    setIsChangingCategory(true);
-    
     setSelectedFilters(prev => ({
       ...prev,
       priceRange: { ...prev.priceRange, [field]: value }
     }));
-    
-    // Restaurar la bandera después de un breve retraso
-    setTimeout(() => {
-      setIsChangingCategory(false);
-    }, 100);
   };
 
   const fetchCategories = async () => {
     try {
-      const response = await axios.get('http://ohanatienda.ddns.net:8000/api/categorias');
+      const response = await axios.get(`${API_BASE_URL}/api/categorias`);
       if (response.data) {
         setCategories(response.data);
       }
@@ -501,21 +479,25 @@ export default function TiendaScreen() {
     }
   };
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
   const toggleFilter = (filterName: string) => {
     setExpandedFilter(expandedFilter === filterName ? null : filterName);
   };
 
+  // Componentes de UI
   const renderFilterSection = (title: string, content: React.ReactNode) => (
     <View style={styles.filterSection}>
       <TouchableOpacity 
         style={styles.filterHeader}
         onPress={() => toggleFilter(title)}
       >
-        <Text style={styles.filterTitle}>{title}</Text>
+        <View style={styles.filterTitleContainer}>
+          <Text style={styles.filterTitle}>{title}</Text>
+          {title === 'Categoría' && selectedFilters.categories.length > 0 && (
+            <View style={styles.filterBadge}>
+              <Text style={styles.filterBadgeText}>{selectedFilters.categories.length}</Text>
+            </View>
+          )}
+        </View>
         <FontAwesome5 
           name={expandedFilter === title ? "chevron-up" : "chevron-down"} 
           size={16} 
@@ -597,7 +579,9 @@ export default function TiendaScreen() {
                 onPress={() => toggleCategory(category.nombre_cat)}
               >
                 {selectedFilters.categories.includes(category.nombre_cat) && (
-                  <FontAwesome5 name="check" size={12} color="#fff" style={styles.checkIcon} />
+                  <View style={styles.categoryIndicator}>
+                    <FontAwesome5 name="check" size={10} color="#fff" />
+                  </View>
                 )}
                 <Text style={[
                   styles.chipText,
@@ -622,44 +606,52 @@ export default function TiendaScreen() {
     </View>
   );
 
-  const renderProduct = ({ item }: { item: Product }) => (
-    <View style={styles.productCard}>
-      <TouchableOpacity 
-        style={styles.productImageContainer}
-        onPress={() => {
-          // Aquí podrías navegar a la vista de detalle del producto
-          console.log('Ver detalle del producto:', item);
-        }}
-      >
-        <Image 
-          source={{ uri: `http://ohanatienda.ddns.net:8000/${item.imagen}` }}
-          style={styles.productImage}
-          resizeMode="cover"
-        />
+  // Renderizado del producto con verificación asíncrona de favorito
+  const renderProduct = ({ item }: { item: Product }) => {
+    // Ya tenemos el estado de favoritos en el hook, por lo que no necesitamos consultar cada vez
+    const isFavorite = favoritos.includes(item.id);
+
+    return (
+      <View style={styles.productCard}>
         <TouchableOpacity 
-          style={styles.favoriteButton}
-          onPress={() => toggleFavorite(item.id)}
+          style={styles.productImageContainer}
+          onPress={() => {
+            router.push({
+              pathname: '/detalles',
+              params: { id: item.id.toString() }
+            });
+          }}
         >
-          <Ionicons 
-            name={favorites.includes(item.id) ? "heart" : "heart-outline"} 
-            size={24} 
-            color={favorites.includes(item.id) ? "#ff0000" : "#fff"} 
+          <Image 
+            source={{ uri: `${API_BASE_URL}/${item.imagen}` }}
+            style={styles.productImage}
+            resizeMode="cover"
           />
+          <TouchableOpacity 
+            style={styles.favoriteButton}
+            onPress={() => handleToggleFavorite(item.id)}
+          >
+            <Ionicons 
+              name={isFavorite ? "heart" : "heart-outline"} 
+              size={24} 
+              color={isFavorite ? "#ff0000" : "#fff"} 
+            />
+          </TouchableOpacity>
         </TouchableOpacity>
-      </TouchableOpacity>
-      <View style={styles.productInfo}>
-        <Text style={styles.productName} numberOfLines={2}>{item.nombre}</Text>
-        <Text style={styles.productPrice}>{item.precio} €</Text>
-        <TouchableOpacity 
-          style={styles.addToCartButton}
-          onPress={() => handleAddToCart(item)}
-        >
-          <FontAwesome5 name="shopping-cart" size={16} color="#fff" />
-          <Text style={styles.addToCartText}>Añadir</Text>
-        </TouchableOpacity>
+        <View style={styles.productInfo}>
+          <Text style={styles.productName} numberOfLines={2}>{item.nombre}</Text>
+          <Text style={styles.productPrice}>{item.precio} €</Text>
+          <TouchableOpacity 
+            style={styles.addToCartButton}
+            onPress={() => handleAddToCart(item)}
+          >
+            <FontAwesome5 name="shopping-cart" size={16} color="#fff" />
+            <Text style={styles.addToCartText}>Añadir</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderFooter = () => {
     if (!hasMoreProducts) return null;
@@ -684,9 +676,14 @@ export default function TiendaScreen() {
     );
   };
 
-  // Modificar el título de la página para mostrar la categoría si hay una seleccionada
   const renderHeader = () => (
     <View style={styles.header}>
+      <TouchableOpacity 
+        style={styles.backButton}
+        onPress={() => setSelectedGender(null)}
+      >
+        <FontAwesome5 name="arrow-left" size={18} color="#333" />
+      </TouchableOpacity>
       <Text style={styles.sectionTitle}>
         {selectedCategoryName 
           ? `${selectedCategoryName} ${selectedGender === 'hombre' ? 'Hombre' : 'Mujer'}` 
@@ -750,12 +747,7 @@ export default function TiendaScreen() {
                 <TouchableOpacity 
                   style={styles.clearSearchButton}
                   onPress={() => {
-                    setIsChangingCategory(true);
                     setSearchQuery('');
-                    setTimeout(() => {
-                      setFilteredProducts(allProducts);
-                      setIsChangingCategory(false);
-                    }, 100);
                   }}
                 >
                   <FontAwesome5 name="times" size={16} color="#666" />
@@ -765,7 +757,7 @@ export default function TiendaScreen() {
 
             {showFilters && renderFilters()}
 
-            {loading && filteredProducts.length === 0 ? (
+            {(loading && filteredProducts.length === 0) || loadingFavoritos ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#000" />
               </View>
@@ -797,6 +789,7 @@ export default function TiendaScreen() {
   );
 }
 
+// Mantenemos el mismo objeto de estilos
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -849,6 +842,12 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eee',
     marginTop: 20,
   },
+  backButton: {
+    padding: 10,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 20,
+    marginRight: 10,
+  },
   sectionTitle: {
     fontSize: 24,
     fontWeight: 'bold',
@@ -872,6 +871,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
   },
+  filterTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   filterSection: {
     marginBottom: 10,
     borderBottomWidth: 1,
@@ -882,6 +885,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 12,
     color: '#333',
+  },
+  filterBadge: {
+    backgroundColor: '#007bff',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    marginBottom: 8,
+  },
+  filterBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   priceRangeContainer: {
     flexDirection: 'row',
@@ -926,21 +944,40 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
     flexDirection: 'row',
     alignItems: 'center',
+    position: 'relative',
   },
   chipSelected: {
     backgroundColor: '#000',
     borderColor: '#000',
   },
   activeCategory: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 5,
-    transform: [{scale: 1.05}] // Ligeramente más grande
+    borderWidth: 2,
+    borderColor: '#007bff', 
+    ...Platform.select({
+      ios: {
+        shadowColor: '#007bff',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.5,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+    transform: [{scale: 1.05}],
   },
-  checkIcon: {
-    marginRight: 5,
+  categoryIndicator: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#007bff',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#fff',
   },
   chipText: {
     fontSize: 14,
@@ -949,25 +986,22 @@ const styles = StyleSheet.create({
   chipTextSelected: {
     color: '#fff',
   },
-  applyFiltersButton: {
-    backgroundColor: '#000',
-    padding: 15,
-    borderRadius: 25,
-    alignItems: 'center',
-    marginTop: 10,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+  filterButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 15,
   },
-  applyFiltersText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+  clearFiltersButton: {
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    padding: 10,
+    borderRadius: 20,
+  },
+  clearFiltersText: {
+    color: '#333',
+    fontSize: 14,
+    fontWeight: '500',
   },
   productsList: {
     padding: 15,
@@ -1063,14 +1097,17 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 25,
     width: '90%',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 5,
+      },
+    }),
   },
   loadMoreText: {
     color: '#fff',
@@ -1088,14 +1125,17 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 15,
     height: 45,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   searchIcon: {
     marginRight: 10,
@@ -1108,23 +1148,6 @@ const styles = StyleSheet.create({
   },
   clearSearchButton: {
     padding: 5,
-  },
-  filterButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 15,
-  },
-  clearFiltersButton: {
-    backgroundColor: '#f5f5f5',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    padding: 10,
-    borderRadius: 20,
-  },
-  clearFiltersText: {
-    color: '#333',
-    fontSize: 14,
-    fontWeight: '500',
   },
   searchLoading: {
     marginRight: 10,
