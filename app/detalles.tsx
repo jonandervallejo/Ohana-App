@@ -24,6 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFavoritos } from './hooks/useFavoritos';
+import { useCart } from './hooks/useCart';
 
 interface ProductImage {
   id: string | number;
@@ -77,6 +78,7 @@ const ProductDetail = () => {
   
   // Usar el hook de favoritos
   const { favoritos, loading: loadingFavoritos, esFavorito, toggleFavorito, recargarFavoritos } = useFavoritos();
+  const { addToCart, refreshLoginStatus } = useCart();
   
   // Función para buscar productos
   const searchProducts = async (query: string) => {
@@ -270,6 +272,11 @@ const ProductDetail = () => {
     }
   }, [id, recargarFavoritos]);
 
+  // Verificar el estado de inicio de sesión cuando se monta el componente
+  useEffect(() => {
+    refreshLoginStatus();
+  }, []);
+
   // Preparar imágenes para el carrusel
   const getAllImages = () => {
     if (!product) return [];
@@ -351,16 +358,29 @@ const ProductDetail = () => {
     }
   };
 
-  const handleAddToCart = () => {
-    if (!isLoggedIn) {
+  const handleAddToCart = async () => {
+    if (!product) return;
+    
+    // Actualizar el estado de inicio de sesión antes de intentar añadir al carrito
+    await refreshLoginStatus();
+    
+    const success = await addToCart({
+      id: product.id,
+      nombre: product.nombre,
+      precio: product.precio,
+      imagen: product.imagen,
+      talla: product.talla,
+      cantidad: quantity
+    });
+
+    if (!success) {
       Alert.alert(
         '🛒 Carrito',
-        'Inicia sesión para añadir productos a tu carrito y acceder a todas las funcionalidades de la tienda.',
+        'Para añadir productos a tu carrito necesitas iniciar sesión. ¿Deseas iniciar sesión ahora?',
         [
           { 
             text: 'Más tarde', 
-            style: 'cancel',
-            onPress: () => console.log('Cancelar presionado')
+            style: 'cancel'
           },
           { 
             text: 'Iniciar sesión', 
@@ -374,8 +394,8 @@ const ProductDetail = () => {
     }
     
     Alert.alert(
-      "Añadido al carrito",
-      `${quantity} ${quantity > 1 ? 'unidades' : 'unidad'} de ${product?.nombre} ${quantity > 1 ? 'han sido añadidas' : 'ha sido añadida'} al carrito.`,
+      "Producto añadido",
+      "El producto ha sido añadido al carrito",
       [{ text: "OK" }]
     );
   };
@@ -384,7 +404,7 @@ const ProductDetail = () => {
     if (!isLoggedIn) {
       Alert.alert(
         '💳 Compra',
-        'Inicia sesión para comprar productos y acceder a todas las funcionalidades de la tienda.',
+        'Para realizar una compra necesitas iniciar sesión. ¿Deseas iniciar sesión ahora?',
         [
           { 
             text: 'Más tarde', 
@@ -403,9 +423,26 @@ const ProductDetail = () => {
     }
     
     Alert.alert(
-      "Proceder al pago",
-      `Continuar con la compra de ${quantity} ${quantity > 1 ? 'unidades' : 'unidad'} de ${product?.nombre}`,
-      [{ text: "Continuar" }]
+      "🛍️ Proceder al pago",
+      `¿Deseas continuar con la compra de ${quantity} ${quantity > 1 ? 'unidades' : 'unidad'} de ${product?.nombre}?`,
+      [
+        {
+          text: "Cancelar",
+          style: "cancel"
+        },
+        {
+          text: "Continuar",
+          style: "default",
+          onPress: () => {
+            // Aquí iría la lógica para proceder al pago
+            Alert.alert(
+              "🚧 En desarrollo",
+              "La funcionalidad de pago está en desarrollo. Pronto podrás realizar tus compras.",
+              [{ text: "Entendido" }]
+            );
+          }
+        }
+      ]
     );
   };
 
@@ -848,12 +885,12 @@ const ProductDetail = () => {
             <View style={styles.bottomActionPanel}>
               <TouchableOpacity
                 style={styles.favoriteButton}
-                onPress={handleToggleFavorite}
+                onPress={() => product && toggleFavorito(product.id)}
               >
-                <Feather 
-                  name="heart" 
+                <Ionicons 
+                  name={product && esFavorito(product.id) ? "heart" : "heart-outline"} 
                   size={24} 
-                  color={productIsFavorite ? "#FF3B30" : "#ddd"} 
+                  color={product && esFavorito(product.id) ? "#ff4444" : "#000"} 
                 />
               </TouchableOpacity>
               
@@ -868,7 +905,7 @@ const ProductDetail = () => {
                 style={styles.shareButton}
                 onPress={handleShare}
               >
-                <Feather name="share" size={24} color="#000" />
+                <Ionicons name="share-outline" size={24} color="#000" />
               </TouchableOpacity>
             </View>
           </>

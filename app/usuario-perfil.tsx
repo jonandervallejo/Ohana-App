@@ -16,6 +16,7 @@ import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, Stack } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Header from '../components/Header';
 
 const { width } = Dimensions.get('window');
 
@@ -82,18 +83,17 @@ const UserProfileScreen = () => {
         {
           text: "Sí, cerrar sesión",
           onPress: async () => {
-            setLogoutLoading(true);
             try {
-              // Ya no eliminaremos los favoritos al cerrar sesión
-              // Solo eliminar datos de sesión
-              await AsyncStorage.removeItem('userToken');
-              await AsyncStorage.removeItem('userData');
+              setLogoutLoading(true);
               
-              // Pequeña demora para mostrar feedback visual
+              // Limpiar todos los datos de sesión
+              await AsyncStorage.clear();
+              
+              // Forzar la redirección a la pantalla de inicio de sesión
               setTimeout(() => {
                 setLogoutLoading(false);
-                // Redireccionar a la pantalla de inicio
-                router.replace('/(tabs)');
+                // Forzar la navegación al formulario de inicio de sesión
+                router.push('/perfil');
               }, 500);
             } catch (error) {
               console.error('Error al cerrar sesión:', error);
@@ -136,17 +136,7 @@ const UserProfileScreen = () => {
         colors={['#f0f7ff', '#ffffff']}
         style={styles.gradientBackground}
       >
-        {/* Header personalizado */}
-        <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Mi Perfil</Text>
-          <View style={styles.headerRight} />
-        </View>
+        <Header showSearch={false} userName={userData?.nombre || 'Usuario'} />
         
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -246,7 +236,7 @@ const UserProfileScreen = () => {
               <View style={styles.actionsContainer}>
                 <TouchableOpacity 
                   style={styles.actionButton}
-                  onPress={() => router.push('/pedidos')}
+                  onPress={() => router.push('/favoritos')}
                 >
                   <FontAwesome5 name="shopping-bag" size={20} color="#333" solid />
                   <Text style={styles.actionButtonText}>Mis Pedidos</Text>
@@ -309,26 +299,6 @@ const styles = StyleSheet.create({
   },
   gradientBackground: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 15,
-    height: 60,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  headerRight: {
-    width: 40,
   },
   scrollView: {
     flex: 1,

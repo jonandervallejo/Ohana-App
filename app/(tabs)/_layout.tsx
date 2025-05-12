@@ -57,6 +57,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <FontAwesome5 name="shopping-bag" size={24} color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="registro"
+        options={{
+          title: 'Perfil',
+          tabBarIcon: ({ color }) => <Ionicons name="person" size={20} color={color} />,
+        }}
+      />
     </Tabs>
   );
   

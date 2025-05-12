@@ -14,7 +14,7 @@ import {
   Dimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FontAwesome5, Ionicons } from '@expo/vector-icons';
+import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, Stack } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -29,7 +29,7 @@ const API_BASE_URL = 'http://ohanatienda.ddns.net:8000';
 const { width } = Dimensions.get('window');
 
 // Componente Toast simple
-const Toast: React.FC<{ visible: boolean; message: string }> = ({ visible, message }) => {
+const Toast: React.FC<{ visible: boolean; message: string; type?: 'success' | 'error' }> = ({ visible, message, type = 'success' }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   
   useEffect(() => {
@@ -54,7 +54,8 @@ const Toast: React.FC<{ visible: boolean; message: string }> = ({ visible, messa
     <Animated.View 
       style={[
         styles.toast,
-        { opacity: fadeAnim }
+        { opacity: fadeAnim },
+        type === 'error' ? { backgroundColor: '#d32f2f' } : { backgroundColor: '#4CAF50' }
       ]}
     >
       <Text style={styles.toastText}>{message}</Text>
@@ -62,7 +63,7 @@ const Toast: React.FC<{ visible: boolean; message: string }> = ({ visible, messa
   );
 };
 
-// Esquema de validación
+// Esquema de validación extendido con campos de contraseña
 const ProfileSchema = Yup.object().shape({
   nombre: Yup.string()
     .min(2, 'El nombre debe tener al menos 2 caracteres')
@@ -75,6 +76,21 @@ const ProfileSchema = Yup.object().shape({
   email: Yup.string()
     .email('Correo electrónico inválido')
     .required('El correo electrónico es requerido'),
+  currentPassword: Yup.string()
+    .when('newPassword', (newPassword, schema) => 
+      newPassword && newPassword.length > 0 
+        ? schema.required('La contraseña actual es requerida para cambiar a una nueva') 
+        : schema
+    ),
+  newPassword: Yup.string()
+    .min(6, 'La contraseña debe tener al menos 6 caracteres')
+    .test('is-different', 'La nueva contraseña debe ser diferente a la actual', function(value) {
+      return !value || value !== this.parent.currentPassword;
+    }),
+  confirmPassword: Yup.string()
+    .test('passwords-match', 'Las contraseñas deben coincidir', function(value) {
+      return !this.parent.newPassword || value === this.parent.newPassword;
+    })
 });
 
 interface UserData {
@@ -89,6 +105,12 @@ interface UserData {
   apellido2?: string;
 }
 
+interface ProfileFormValues extends UserData {
+  currentPassword?: string;
+  newPassword?: string;
+  confirmPassword?: string;
+}
+
 const EditProfileScreen = () => {
   const router = useRouter();
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -97,10 +119,29 @@ const EditProfileScreen = () => {
   const [error, setError] = useState<string | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+  const [showPasswordSection, setShowPasswordSection] = useState(false);
+  
+  // Estados para mostrar/ocultar contraseñas
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
+  // Animación para la sección de contraseña
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  
+  useEffect(() => {
+    Animated.timing(slideAnim, {
+      toValue: showPasswordSection ? 1 : 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [showPasswordSection]);
 
   // Función para mostrar el toast
-  const showToast = (message: string, duration = 2000) => {
+  const showToast = (message: string, type: 'success' | 'error' = 'success', duration = 2000) => {
     setToastMessage(message);
+    setToastType(type);
     setToastVisible(true);
     
     // Ocultar el toast después de la duración especificada
@@ -135,7 +176,7 @@ const EditProfileScreen = () => {
     getUserData();
   }, []);
 
-  const handleSubmit = async (values: UserData) => {
+  const handleSubmit = async (values: ProfileFormValues) => {
     try {
       setSubmitting(true);
       const token = await AsyncStorage.getItem('userToken');
@@ -151,7 +192,7 @@ const EditProfileScreen = () => {
       }
   
       // Preparar datos a actualizar
-      const updateData = {
+      const updateData: any = {
         nombre: values.nombre,
         apellido1: userData.apellido1 || '',
         apellido2: userData.apellido2 || '',
@@ -159,8 +200,15 @@ const EditProfileScreen = () => {
         telefono: values.telefono || null,
         direccion: values.direccion || null
       };
+      
+      // Agregar datos de contraseña si se está cambiando
+      if (values.currentPassword && values.newPassword && values.confirmPassword) {
+        updateData.current_password = values.currentPassword;
+        updateData.password = values.newPassword;
+        updateData.password_confirmation = values.confirmPassword;
+      }
   
-      // Usar el endpoint específico para apps móviles (POST en lugar de PUT)
+      // Usar el endpoint específico para apps móviles
       const response = await axios.post(
         `${API_BASE_URL}/api/tienda/update-perfil`,
         updateData,
@@ -174,13 +222,24 @@ const EditProfileScreen = () => {
   
       console.log('Respuesta actualización:', response.data);
       
-      // Actualizar datos en AsyncStorage
-      const updatedUserData = {...userData, ...values};
+      // Actualizar datos en AsyncStorage (solo los datos de perfil, no la contraseña)
+      const updatedUserData = {
+        ...userData, 
+        nombre: values.nombre,
+        email: values.email,
+        telefono: values.telefono,
+        direccion: values.direccion
+      };
+      
       await AsyncStorage.setItem('userData', JSON.stringify(updatedUserData));
       
-      // Mostrar toast de éxito en vez de Alert
+      // Mostrar toast de éxito
       setSubmitting(false);
-      showToast('¡Perfil actualizado con éxito!');
+      showToast(values.newPassword 
+        ? '¡Perfil y contraseña actualizados con éxito!' 
+        : '¡Perfil actualizado con éxito!', 
+        'success'
+      );
       
       // Redirigir después de mostrar el toast
       setTimeout(() => {
@@ -200,6 +259,11 @@ const EditProfileScreen = () => {
             const firstErrorField = Object.keys(validationErrors)[0];
             const firstError = validationErrors[firstErrorField];
             errorMessage = Array.isArray(firstError) ? firstError[0] : firstError;
+            
+            // Si es un error de contraseña actual incorrecta
+            if (firstErrorField === 'current_password' || firstErrorField === 'password') {
+              errorMessage = 'La contraseña actual es incorrecta';
+            }
           }
         } else if (error.response.status === 401) {
           errorMessage = 'Tu sesión ha expirado. Por favor, inicia sesión de nuevo.';
@@ -211,7 +275,7 @@ const EditProfileScreen = () => {
         }
       }
       
-      Alert.alert('Error', errorMessage);
+      showToast(errorMessage, 'error');
       setSubmitting(false);
     }
   };
@@ -284,6 +348,9 @@ const EditProfileScreen = () => {
                     email: userData?.email || '',
                     telefono: userData?.telefono || '',
                     direccion: userData?.direccion || '',
+                    currentPassword: '',
+                    newPassword: '',
+                    confirmPassword: ''
                   }}
                   validationSchema={ProfileSchema}
                   onSubmit={handleSubmit}
@@ -368,6 +435,144 @@ const EditProfileScreen = () => {
                           <Text style={styles.errorText}>{errors.direccion}</Text>
                         )}
                       </View>
+                      
+                      {/* Sección de cambio de contraseña mejorada */}
+                      <View style={styles.securitySection}>
+                        <TouchableOpacity
+                          style={styles.passwordToggleContainer}
+                          onPress={() => setShowPasswordSection(!showPasswordSection)}
+                        >
+                          <View style={styles.passwordToggleLeft}>
+                            <FontAwesome5 name="lock" size={18} color="#007AFF" style={styles.passwordIcon} />
+                            <Text style={styles.passwordToggleText}>
+                              {showPasswordSection ? 'Ocultar opciones de seguridad' : 'Cambiar contraseña'}
+                            </Text>
+                          </View>
+                          <Ionicons 
+                            name={showPasswordSection ? "chevron-up" : "chevron-down"} 
+                            size={20} 
+                            color="#007AFF" 
+                          />
+                        </TouchableOpacity>
+                        
+                        {showPasswordSection && (
+                          <Animated.View 
+                            style={[
+                              styles.passwordSection,
+                              {
+                                maxHeight: slideAnim.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [0, 500]
+                                }),
+                                opacity: slideAnim
+                              }
+                            ]}
+                          >
+                            <View style={styles.passwordHeaderSection}>
+                              <FontAwesome5 name="shield-alt" size={16} color="#007AFF" />
+                              <Text style={styles.passwordSectionTitle}>Actualizar contraseña</Text>
+                            </View>
+                            
+                            <Text style={styles.passwordInfo}>
+                              Para cambiar tu contraseña, ingresa tu contraseña actual y la nueva contraseña.
+                            </Text>
+                            
+                            <View style={styles.inputGroup}>
+                              <Text style={styles.inputLabel}>Contraseña actual</Text>
+                              <View style={styles.passwordInputContainer}>
+                                <TextInput
+                                  style={[
+                                    styles.passwordInput,
+                                    touched.currentPassword && errors.currentPassword && styles.inputError
+                                  ]}
+                                  value={values.currentPassword}
+                                  onChangeText={handleChange('currentPassword')}
+                                  onBlur={handleBlur('currentPassword')}
+                                  placeholder="Ingresa tu contraseña actual"
+                                  secureTextEntry={!showCurrentPassword}
+                                  editable={!submitting}
+                                />
+                                <TouchableOpacity 
+                                  style={styles.eyeIcon}
+                                  onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                                >
+                                  <Ionicons 
+                                    name={showCurrentPassword ? "eye-off" : "eye"} 
+                                    size={22} 
+                                    color="#666" 
+                                  />
+                                </TouchableOpacity>
+                              </View>
+                              {touched.currentPassword && errors.currentPassword && (
+                                <Text style={styles.errorText}>{errors.currentPassword}</Text>
+                              )}
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                              <Text style={styles.inputLabel}>Nueva contraseña</Text>
+                              <View style={styles.passwordInputContainer}>
+                                <TextInput
+                                  style={[
+                                    styles.passwordInput,
+                                    touched.newPassword && errors.newPassword && styles.inputError
+                                  ]}
+                                  value={values.newPassword}
+                                  onChangeText={handleChange('newPassword')}
+                                  onBlur={handleBlur('newPassword')}
+                                  placeholder="Ingresa tu nueva contraseña"
+                                  secureTextEntry={!showNewPassword}
+                                  editable={!submitting}
+                                />
+                                <TouchableOpacity 
+                                  style={styles.eyeIcon}
+                                  onPress={() => setShowNewPassword(!showNewPassword)}
+                                >
+                                  <Ionicons 
+                                    name={showNewPassword ? "eye-off" : "eye"} 
+                                    size={22} 
+                                    color="#666" 
+                                  />
+                                </TouchableOpacity>
+                              </View>
+                              {touched.newPassword && errors.newPassword && (
+                                <Text style={styles.errorText}>{errors.newPassword}</Text>
+                              )}
+                              <Text style={styles.passwordHint}>La contraseña debe tener al menos 6 caracteres</Text>
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                              <Text style={styles.inputLabel}>Confirmar contraseña</Text>
+                              <View style={styles.passwordInputContainer}>
+                                <TextInput
+                                  style={[
+                                    styles.passwordInput,
+                                    touched.confirmPassword && errors.confirmPassword && styles.inputError
+                                  ]}
+                                  value={values.confirmPassword}
+                                  onChangeText={handleChange('confirmPassword')}
+                                  onBlur={handleBlur('confirmPassword')}
+                                  placeholder="Confirma tu nueva contraseña"
+                                  secureTextEntry={!showConfirmPassword}
+                                  editable={!submitting}
+                                />
+                                <TouchableOpacity 
+                                  style={styles.eyeIcon}
+                                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                                >
+                                  <Ionicons 
+                                    name={showConfirmPassword ? "eye-off" : "eye"} 
+                                    size={22} 
+                                    color="#666" 
+                                  />
+                                </TouchableOpacity>
+                              </View>
+                              {touched.confirmPassword && errors.confirmPassword && (
+                                <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+                              )}
+                            </View>
+                          </Animated.View>
+                        )}
+                      </View>
 
                       <View style={styles.buttonsContainer}>
                         <TouchableOpacity
@@ -411,6 +616,7 @@ const EditProfileScreen = () => {
       <Toast 
         visible={toastVisible}
         message={toastMessage}
+        type={toastType}
       />
     </SafeAreaView>
   );
@@ -528,6 +734,93 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
   },
+  // Nuevos estilos mejorados para la sección de contraseña
+  securitySection: {
+    marginTop: 10,
+    marginBottom: 15,
+  },
+  passwordToggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f0f7ff',
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#d0e4ff',
+  },
+  passwordToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  passwordIcon: {
+    marginRight: 10,
+  },
+  passwordToggleText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  passwordSection: {
+    backgroundColor: '#f9f9f9',
+    padding: 15,
+    borderRadius: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#007AFF',
+    marginBottom: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  passwordHeaderSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  passwordSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginLeft: 8,
+  },
+  passwordInfo: {
+    color: '#666',
+    fontSize: 14,
+    marginBottom: 15,
+    lineHeight: 20,
+  },
+  passwordInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#333',
+  },
+  eyeIcon: {
+    padding: 10,
+  },
+  passwordHint: {
+    color: '#888',
+    fontSize: 12,
+    marginTop: 6,
+    fontStyle: 'italic',
+  },
   buttonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -597,6 +890,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 30,
     borderRadius: 25,
+    marginTop: 20,
   },
   loginButtonText: {
     color: 'white',
@@ -611,12 +905,11 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 14,
   },
-  // Estilos para el toast (igual que en perfil.tsx)
   toast: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 100 : 100, // Valores aumentados para que aparezca más abajo
+    top: Platform.OS === 'ios' ? 100 : 100,
     alignSelf: 'center',
-    backgroundColor: '#4CAF50', // Color verde para éxito
+    backgroundColor: '#4CAF50',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 25,

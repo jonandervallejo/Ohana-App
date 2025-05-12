@@ -450,10 +450,13 @@ export default function RegisterFormScreen() {
                 <View style={styles.separatorContainer}>
                   <View style={styles.separatorLine} />
                   <TouchableOpacity 
-                    onPress={() => router.push('/perfil')}
+                    onPress={() => {
+                      console.log("Navegando a perfil desde registro");
+                      router.replace('/perfil');
+                    }}
                     disabled={isLoading}
                   >
-                    <Text style={styles.separatorText}>¿Ya tienes cuenta?</Text>
+                    <Text style={styles.separatorText}>¿Ya tienes cuenta? Inicia sesión</Text>
                   </TouchableOpacity>
                   <View style={styles.separatorLine} />
                 </View>

@@ -12,7 +12,8 @@ import {
   ActivityIndicator,
   Dimensions,
   Platform,
-  Alert
+  Alert,
+  Keyboard
 } from 'react-native';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -92,7 +93,7 @@ export default function TiendaScreen() {
       if (!isLoggedIn) {
         Alert.alert(
           '⭐ Favoritos',
-          'Para añadir productos a favoritos primero deberás de iniciar sesión.',
+          'Para guardar tus productos favoritos necesitas iniciar sesión. ¿Deseas iniciar sesión ahora?',
           [
             { 
               text: 'Más tarde', 
@@ -111,9 +112,21 @@ export default function TiendaScreen() {
   
       // Si está logueado, toggle favorito directamente
       await toggleFavorito(productId);
+      
+      // Mostrar feedback al usuario
+      const isFav = await esFavorito(productId);
+      Alert.alert(
+        isFav ? "✅ Añadido a favoritos" : "❌ Eliminado de favoritos",
+        isFav ? "El producto ha sido añadido a tus favoritos" : "El producto ha sido eliminado de tus favoritos",
+        [{ text: "Entendido" }]
+      );
     } catch (error) {
       console.error('Error al gestionar favorito:', error);
-      Alert.alert('Error', 'No se pudo actualizar el favorito');
+      Alert.alert(
+        "❌ Error",
+        "No se pudo actualizar el favorito. Por favor, inténtalo de nuevo.",
+        [{ text: "Entendido" }]
+      );
     }
   };
 
@@ -242,7 +255,7 @@ export default function TiendaScreen() {
     if (!isLoggedIn) {
       Alert.alert(
         '🛒 Carrito',
-        'Inicia sesión para añadir productos a tu carrito y acceder a todas las funcionalidades de la tienda.',
+        'Para añadir productos a tu carrito necesitas iniciar sesión. ¿Deseas iniciar sesión ahora?',
         [
           { 
             text: 'Más tarde', 
@@ -259,8 +272,22 @@ export default function TiendaScreen() {
       );
       return;
     }
-    // Aquí irá la lógica para añadir al carrito
-    console.log('Añadir al carrito:', product);
+    
+    Alert.alert(
+      "✅ Producto añadido",
+      `El producto "${product.nombre}" ha sido añadido al carrito.`,
+      [
+        { 
+          text: "Seguir comprando",
+          style: "cancel"
+        },
+        { 
+          text: "Ir al carrito",
+          style: "default",
+          onPress: () => router.push('/(tabs)/carrito')
+        }
+      ]
+    );
   };
 
   // Función optimizada para cargar todos los productos
@@ -329,6 +356,25 @@ export default function TiendaScreen() {
 
   const handleSearch = (text: string) => {
     setSearchQuery(text);
+    
+    // Aplicar filtros inmediatamente cuando se escribe
+    if (text.trim() === '') {
+      applyFilters();
+    } else {
+      const filtered = allProducts.filter(product => 
+        product.nombre.toLowerCase().includes(text.toLowerCase())
+      );
+      setFilteredProducts(filtered);
+      setDisplayedProducts(filtered);
+    }
+  };
+
+  // Manejar la tecla de retorno
+  const handleSearchSubmit = () => {
+    Keyboard.dismiss();
+    if (searchQuery.trim() !== '') {
+      applyFilters();
+    }
   };
 
   const applyFilters = useCallback(() => {
@@ -740,6 +786,9 @@ export default function TiendaScreen() {
                 placeholderTextColor="#999"
                 value={searchQuery}
                 onChangeText={handleSearch}
+                onSubmitEditing={handleSearchSubmit}
+                returnKeyType="search"
+                blurOnSubmit={false}
               />
               {isLoadingAllProducts ? (
                 <ActivityIndicator size="small" color="#666" style={styles.searchLoading} />

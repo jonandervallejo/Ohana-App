@@ -18,6 +18,7 @@ import {
   Keyboard,
   ImageBackground,
   Animated,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
@@ -25,6 +26,7 @@ import axios from 'axios';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Stack } from 'expo-router';
 
 
 interface ImageData {
@@ -466,6 +468,9 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
 };
 
 const HomeScreen = () => {
+
+  
+  
   const [categories, setCategories] = useState<Category[]>([]);
   const [infiniteCategories, setInfiniteCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
@@ -895,19 +900,27 @@ const HomeScreen = () => {
   };
 
   // Función para manejar la navegación al perfil del usuario de forma segura
-  const handleProfileNavigation = () => {
-    // Si está autenticado, ir directamente a la página de usuario
-    if (isAuthenticated) {
-      console.log("Navegando a usuario-perfil");
-      router.push('/usuario-perfil');
-    } else {
-      console.log("Navegando a perfil (login)");
-      router.push('/perfil');
+  const handleProfileNavigation = async () => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      const userData = await AsyncStorage.getItem('userData');
+      
+      if (token && userData) {
+        console.log("Navegando a usuario-perfil");
+        router.push('/usuario-perfil');
+      } else {
+        console.log("Navegando a registro (login)");
+        router.push('/registro');
+      }
+    } catch (error) {
+      console.error("Error al verificar autenticación:", error);
+      // En caso de error, ir a la pantalla de registro
+      router.push('/registro');
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <LinearGradient
         colors={['#f8f8f8', '#ffffff']}
         style={styles.gradientBackground}
@@ -1189,13 +1202,14 @@ const HomeScreen = () => {
           </View>
         </ScrollView>
       </LinearGradient>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#fff',
   },
   gradientBackground: {
     flex: 1,
@@ -1217,6 +1231,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
+    paddingTop: Platform.OS === 'ios' ? 0 : 0,
   },
   headerContainer: {
     flexDirection: 'row',
@@ -1302,7 +1317,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 60,
     paddingBottom: 20,
   },
   // Estilos para los resultados de búsqueda
@@ -1398,7 +1412,6 @@ const styles = StyleSheet.create({
   carruselWrapper: {
     height: 250,
     marginHorizontal: 15,
-    marginTop: 40,
     marginBottom: 20,
     backgroundColor: '#f8f8f8',
     borderRadius: 12,

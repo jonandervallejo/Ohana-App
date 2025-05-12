@@ -1,37 +1,43 @@
-import React, { useEffect, useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
+import React, { useEffect, useRef, useState } from 'react';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  Animated,
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
-  Alert,
-  TextInput,
-  Animated,
+  ScrollView,
+  Keyboard,
   Dimensions
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { FontAwesome5, Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, Stack } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Formik } from 'formik';
 import * as Yup from 'yup';
+import { useRouter, useFocusEffect } from 'expo-router';
 import axios from 'axios';
-import { useTheme } from '../theme'; // Importar el hook de tema
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // URL base para la API
 const API_BASE_URL = 'http://ohanatienda.ddns.net:8000';
+// Endpoint específico para clientes
+const CLIENT_LOGIN_ENDPOINT = '/api/tienda/login';
 
-// Obtener el ancho de la pantalla para el toast
+// Esquema de validación
+const LoginSchema = Yup.object().shape({
+  email: Yup.string()
+    .email('Correo electrónico inválido')
+    .required('El correo electrónico es requerido'),
+  password: Yup.string()
+    .required('La contraseña es requerida'),
+});
+
 const { width } = Dimensions.get('window');
 
-// Componente Toast con soporte para tema
-const Toast: React.FC<{ visible: boolean; message: string }> = ({ visible, message }) => {
-  const { theme } = useTheme();
+// Componente Toast simple
+const Toast: React.FC<{ visible: boolean; message: string; type?: 'success' | 'error' }> = ({ visible, message, type = 'success' }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   
   useEffect(() => {
@@ -56,623 +62,352 @@ const Toast: React.FC<{ visible: boolean; message: string }> = ({ visible, messa
     <Animated.View 
       style={[
         styles.toast,
-        { 
-          opacity: fadeAnim,
-          backgroundColor: theme.toastBg,
-        }
+        { opacity: fadeAnim },
+        type === 'error' ? { backgroundColor: '#d32f2f' } : { backgroundColor: '#4CAF50' }
       ]}
     >
-      <Text style={[styles.toastText, { color: theme.toastText }]}>
-        {message}
-      </Text>
+      <Text style={styles.toastText}>{message}</Text>
     </Animated.View>
   );
 };
 
-// Esquema de validación
-const ProfileSchema = Yup.object().shape({
-  nombre: Yup.string()
-    .min(2, 'El nombre debe tener al menos 2 caracteres')
-    .required('El nombre es requerido'),
-  telefono: Yup.string()
-    .nullable()
-    .matches(/^[0-9]*$/, 'Solo se permiten números'),
-  direccion: Yup.string()
-    .nullable(),
-  email: Yup.string()
-    .email('Correo electrónico inválido')
-    .required('El correo electrónico es requerido'),
-});
-
-interface UserData {
-  id?: number;
-  nombre?: string;
-  email?: string;
-  direccion?: string;
-  telefono?: string;
-  rol?: string;
-  created_at?: string;
-  apellido1?: string;
-  apellido2?: string;
-}
-
-const EditProfileScreen = () => {
-  const { theme, isDark, toggleTheme } = useTheme(); // Usar el tema
+export default function LoginFormScreen() {
   const router = useRouter();
-  const [userData, setUserData] = useState<UserData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const slideAnim = useRef(new Animated.Value(-100)).current;
+  const [isLoading, setIsLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+
+  const startAnimation = () => {
+    slideAnim.setValue(-100);
+    Animated.spring(slideAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 50,
+      friction: 7,
+    }).start();
+  };
 
   // Función para mostrar el toast
-  const showToast = (message: string, duration = 2000) => {
+  const showToast = (message: string, type: 'success' | 'error' = 'success', duration = 3000) => {
     setToastMessage(message);
+    setToastType(type);
     setToastVisible(true);
     
-    // Ocultar el toast después de la duración especificada
     setTimeout(() => {
       setToastVisible(false);
     }, duration);
   };
 
-  useEffect(() => {
-    const getUserData = async () => {
-      try {
-        setLoading(true);
-        const userDataStr = await AsyncStorage.getItem('userData');
-        const token = await AsyncStorage.getItem('userToken');
-
-        if (!token || !userDataStr) {
-          setError('No has iniciado sesión');
-          router.replace('/perfil');
-          return;
-        }
-
-        const parsedUserData = JSON.parse(userDataStr);
-        setUserData(parsedUserData);
-      } catch (error) {
-        console.error('Error al cargar datos de usuario:', error);
-        setError('Error al cargar tus datos');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    getUserData();
-  }, []);
-
-  const handleSubmit = async (values: UserData) => {
-    try {
-      setSubmitting(true);
-      const token = await AsyncStorage.getItem('userToken');
-      
-      if (!token) {
-        Alert.alert('Error', 'Sesión expirada. Por favor, inicia sesión de nuevo.');
-        router.replace('/perfil');
-        return;
-      }
-  
-      if (!userData?.id) {
-        throw new Error('ID de usuario no encontrado');
-      }
-  
-      // Preparar datos a actualizar
-      const updateData = {
-        nombre: values.nombre,
-        apellido1: userData.apellido1 || '',
-        apellido2: userData.apellido2 || '',
-        email: values.email,
-        telefono: values.telefono || null,
-        direccion: values.direccion || null
+  useFocusEffect(
+    React.useCallback(() => {
+      startAnimation();
+      setLoginError(null);
+      return () => {
+        slideAnim.setValue(-100);
       };
-  
-      // Usar el endpoint específico para apps móviles (POST en lugar de PUT)
-      const response = await axios.post(
-        `${API_BASE_URL}/api/tienda/update-perfil`,
-        updateData,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+    }, [])
+  );
+
+  const handleSubmit = async (values: { email: string; password: string }) => {
+    Keyboard.dismiss();
+    setIsLoading(true);
+    setLoginError(null);
+    
+    try {
+      const loginData = {
+        email: values.email,
+        password: values.password,
+        client_app: true // Indicar que es una app de cliente
+      };
+      
+      console.log("Enviando datos de login:", JSON.stringify(loginData));
+      
+      // Usar el endpoint específico para clientes
+      const response = await axios.post(`${API_BASE_URL}${CLIENT_LOGIN_ENDPOINT}`, loginData, {
+        headers: {
+          'X-App-Type': 'client', // Header adicional para identificación
+          'Content-Type': 'application/json'
         }
-      );
-  
-      console.log('Respuesta actualización:', response.data);
+      });
       
-      // Actualizar datos en AsyncStorage
-      const updatedUserData = {...userData, ...values};
-      await AsyncStorage.setItem('userData', JSON.stringify(updatedUserData));
+      console.log("Respuesta completa del servidor:", JSON.stringify(response.data));
       
-      // Mostrar toast de éxito en vez de Alert
-      setSubmitting(false);
-      showToast('¡Perfil actualizado con éxito!');
+      // ARREGLADO: Verificamos correctamente la respuesta exitosa
+      // Ahora también detectamos "Login exitoso" o si hay un token en la respuesta
+      if (
+        response.data.success || 
+        response.data.status === 'success' || 
+        response.data.message?.includes('exitoso') ||
+        response.data.message?.includes('success') ||
+        response.data.token
+      ) {
+        // Extraemos el token de la respuesta
+        const token = response.data.token;
+        
+        if (token) {
+          await AsyncStorage.setItem('userToken', token);
+          
+          // Guardamos los datos del usuario
+          const userData = response.data.user || { email: values.email };
+          
+          await AsyncStorage.setItem('userData', JSON.stringify(userData));
+          
+          setIsLoading(false);
+          showToast('Inicio de sesión exitoso. ¡Bienvenido a OHANA!', 'success');
+          
+          setTimeout(() => {
+            router.replace('/(tabs)');
+          }, 2000);
+        } else {
+          throw new Error('No se recibió un token válido del servidor');
+        }
+      } else {
+        throw new Error('Credenciales inválidas');
+      }
       
-      // Redirigir después de mostrar el toast
-      setTimeout(() => {
-        router.back();
-      }, 1500);
-  
     } catch (error: any) {
-      console.error('Error al actualizar perfil:', error);
+      console.error("Error detallado en login:", error);
+      setIsLoading(false);
       
-      let errorMessage = 'Error al actualizar tu perfil. Inténtalo de nuevo.';
+      let errorMessage = 'Error en el inicio de sesión. Por favor, inténtalo de nuevo.';
       
       if (error.response) {
-        if (error.response.status === 422) {
-          // Error de validación
-          const validationErrors = error.response.data?.errors || {};
-          if (Object.keys(validationErrors).length > 0) {
-            const firstErrorField = Object.keys(validationErrors)[0];
-            const firstError = validationErrors[firstErrorField];
-            errorMessage = Array.isArray(firstError) ? firstError[0] : firstError;
-          }
-        } else if (error.response.status === 401) {
-          errorMessage = 'Tu sesión ha expirado. Por favor, inicia sesión de nuevo.';
-          await AsyncStorage.removeItem('userToken');
-          await AsyncStorage.removeItem('userData');
-          router.replace('/perfil');
+        console.log("Respuesta de error del servidor:", error.response.data);
+        
+        if (error.response.status === 401) {
+          errorMessage = 'Credenciales inválidas. Por favor, verifica tu correo y contraseña.';
+        } else if (error.response.status === 403) {
+          // Manejar específicamente el error 403 (Acceso prohibido)
+          errorMessage = error.response.data.message || 'No tienes acceso a este sistema.';
+          
+          // Mostrar una alerta más detallada para guiar al usuario
+          Alert.alert(
+            "Acceso no permitido",
+            "Esta aplicación es para clientes. Si eres empleado o administrador, por favor utiliza la aplicación correspondiente.",
+            [{ text: "Entendido", style: "default" }]
+          );
+        } else if (error.response.status === 422) {
+          errorMessage = 'Por favor, verifica que los datos sean correctos.';
         } else {
-          errorMessage = `Error en el servidor: ${error.response.status}`;
+          errorMessage = `Error en el servidor: ${error.response.status}. Por favor, inténtalo más tarde.`;
         }
+      } else if (error.request) {
+        errorMessage = 'No se pudo conectar con el servidor. Comprueba tu conexión a internet.';
       }
       
-      Alert.alert('Error', errorMessage);
-      setSubmitting(false);
+      setLoginError(errorMessage);
+      showToast(errorMessage, 'error');
     }
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <Stack.Screen
-        options={{
-          headerShown: false,
-        }}
-      />
-      
-      <LinearGradient
-        colors={theme.gradientBg as [string, string, ...string[]]}
-        style={styles.gradientBackground}
-      >
-        {/* Header personalizado */}
-        <View style={[styles.header, { borderBottomColor: theme.border }]}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => router.back()}
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+    >
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <Text style={styles.title}>OHANA</Text>
+
+        <Text style={styles.description}>
+          Inicia sesión para continuar
+        </Text>
+
+        <Animated.View 
+          style={[
+            styles.formContainer,
+            {
+              transform: [{ translateY: slideAnim }],
+              opacity: slideAnim.interpolate({
+                inputRange: [-100, 0],
+                outputRange: [0, 1],
+              }),
+            }
+          ]}
+        >
+          {loginError && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorMessage}>{loginError}</Text>
+            </View>
+          )}
+
+          <Formik
+            initialValues={{ email: '', password: '' }}
+            validationSchema={LoginSchema}
+            onSubmit={handleSubmit}
           >
-            <Ionicons name="arrow-back" size={24} color={theme.text} />
-          </TouchableOpacity>
-          
-          <Text style={[styles.headerTitle, { color: theme.text }]}>
-            Editar Perfil
-          </Text>
-          
-          {/* Botón para cambiar tema */}
-          <TouchableOpacity 
-            style={styles.themeToggle}
-            onPress={toggleTheme}
-          >
-            <Ionicons 
-              name={isDark ? "sunny-outline" : "moon-outline"} 
-              size={24} 
-              color={theme.text} 
-            />
-          </TouchableOpacity>
-        </View>
-        
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.loadingIndicator} />
-            <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-              Cargando tus datos...
-            </Text>
-          </View>
-        ) : error ? (
-          <View style={styles.errorContainer}>
-            <FontAwesome5 name="exclamation-circle" size={50} color={theme.error} />
-            <Text style={[styles.errorText, { color: theme.textSecondary }]}>
-              {error}
-            </Text>
-            <TouchableOpacity 
-              style={[styles.loginButton, { backgroundColor: theme.primary }]}
-              onPress={() => router.replace('/perfil')}
-            >
-              <Text style={styles.loginButtonText}>Volver</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={{flex: 1}}
-          >
-            <ScrollView 
-              style={styles.scrollView}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{paddingBottom: 40}}
-            >
-              <View style={styles.formContainer}>
-                <View style={styles.profileHeader}>
-                  <View style={styles.avatarContainer}>
-                    <View 
-                      style={[
-                        styles.avatar, 
-                        { 
-                          backgroundColor: theme.avatarBg,
-                          borderColor: theme.avatarBorder 
-                        }
-                      ]}
-                    >
-                      <FontAwesome5 name="user" size={40} color={theme.primary} />
-                    </View>
-                  </View>
-                  <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-                    Actualiza tu información personal
-                  </Text>
-                </View>
-
-                <Formik
-                  initialValues={{
-                    nombre: userData?.nombre || '',
-                    email: userData?.email || '',
-                    telefono: userData?.telefono || '',
-                    direccion: userData?.direccion || '',
-                  }}
-                  validationSchema={ProfileSchema}
-                  onSubmit={handleSubmit}
-                >
-                  {({ handleChange, handleBlur, handleSubmit, values, errors, touched }) => (
-                    <View>
-                      <View style={styles.inputGroup}>
-                        <Text style={[styles.inputLabel, { color: theme.text }]}>
-                          Nombre
-                        </Text>
-                        <TextInput
-                          style={[
-                            styles.input,
-                            { 
-                              backgroundColor: theme.inputBg,
-                              borderColor: touched.nombre && errors.nombre ? theme.error : theme.border,
-                              color: theme.inputText,
-                            }
-                          ]}
-                          value={values.nombre}
-                          onChangeText={handleChange('nombre')}
-                          onBlur={handleBlur('nombre')}
-                          placeholder="Ingresa tu nombre"
-                          placeholderTextColor={theme.textLight}
-                          editable={!submitting}
-                        />
-                        {touched.nombre && errors.nombre && (
-                          <Text style={[styles.errorText, { color: theme.error }]}>
-                            {errors.nombre}
-                          </Text>
-                        )}
-                      </View>
-
-                      <View style={styles.inputGroup}>
-                        <Text style={[styles.inputLabel, { color: theme.text }]}>
-                          Correo electrónico
-                        </Text>
-                        <TextInput
-                          style={[
-                            styles.input,
-                            { 
-                              backgroundColor: theme.inputBg,
-                              borderColor: touched.email && errors.email ? theme.error : theme.border,
-                              color: theme.inputText,
-                            }
-                          ]}
-                          value={values.email}
-                          onChangeText={handleChange('email')}
-                          onBlur={handleBlur('email')}
-                          placeholder="Ingresa tu correo electrónico"
-                          placeholderTextColor={theme.textLight}
-                          keyboardType="email-address"
-                          editable={!submitting}
-                          autoCapitalize="none"
-                        />
-                        {touched.email && errors.email && (
-                          <Text style={[styles.errorText, { color: theme.error }]}>
-                            {errors.email}
-                          </Text>
-                        )}
-                      </View>
-
-                      <View style={styles.inputGroup}>
-                        <Text style={[styles.inputLabel, { color: theme.text }]}>
-                          Teléfono
-                        </Text>
-                        <TextInput
-                          style={[
-                            styles.input,
-                            { 
-                              backgroundColor: theme.inputBg,
-                              borderColor: touched.telefono && errors.telefono ? theme.error : theme.border,
-                              color: theme.inputText,
-                            }
-                          ]}
-                          value={values.telefono}
-                          onChangeText={handleChange('telefono')}
-                          onBlur={handleBlur('telefono')}
-                          placeholder="Ingresa tu número de teléfono"
-                          placeholderTextColor={theme.textLight}
-                          keyboardType="phone-pad"
-                          editable={!submitting}
-                        />
-                        {touched.telefono && errors.telefono && (
-                          <Text style={[styles.errorText, { color: theme.error }]}>
-                            {errors.telefono}
-                          </Text>
-                        )}
-                      </View>
-
-                      <View style={styles.inputGroup}>
-                        <Text style={[styles.inputLabel, { color: theme.text }]}>
-                          Dirección
-                        </Text>
-                        <TextInput
-                          style={[
-                            styles.input,
-                            styles.textArea,
-                            { 
-                              backgroundColor: theme.inputBg,
-                              borderColor: touched.direccion && errors.direccion ? theme.error : theme.border,
-                              color: theme.inputText,
-                            }
-                          ]}
-                          value={values.direccion}
-                          onChangeText={handleChange('direccion')}
-                          onBlur={handleBlur('direccion')}
-                          placeholder="Ingresa tu dirección"
-                          placeholderTextColor={theme.textLight}
-                          multiline
-                          numberOfLines={3}
-                          textAlignVertical="top"
-                          editable={!submitting}
-                        />
-                        {touched.direccion && errors.direccion && (
-                          <Text style={[styles.errorText, { color: theme.error }]}>
-                            {errors.direccion}
-                          </Text>
-                        )}
-                      </View>
-
-                      <View style={styles.buttonsContainer}>
-                        <TouchableOpacity
-                          style={[
-                            styles.cancelButton,
-                            {
-                              backgroundColor: theme.inputBg,
-                              borderColor: theme.border
-                            }
-                          ]}
-                          onPress={() => router.back()}
-                          disabled={submitting}
-                        >
-                          <Text style={[styles.cancelButtonText, { color: theme.text }]}>
-                            Cancelar
-                          </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={[
-                            styles.saveButton, 
-                            {
-                              backgroundColor: submitting ? theme.disabled : theme.primary
-                            }
-                          ]}
-                          onPress={() => handleSubmit()}
-                          disabled={submitting}
-                        >
-                          {submitting ? (
-                            <ActivityIndicator size="small" color="#ffffff" />
-                          ) : (
-                            <Text style={styles.saveButtonText}>Guardar Cambios</Text>
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  )}
-                </Formik>
-
-                {userData?.created_at && (
-                  <View style={styles.footerContainer}>
-                    <Text style={[styles.footerText, { color: theme.textLight }]}>
-                      Cuenta creada el {formatDate(userData.created_at)}
-                    </Text>
-                  </View>
+            {({ handleChange, handleBlur, handleSubmit, values, errors, touched }) => (
+              <View>
+                <TextInput
+                  style={[
+                    styles.input,
+                    touched.email && errors.email && styles.inputError
+                  ]}
+                  placeholder="Correo electrónico"
+                  value={values.email}
+                  onChangeText={handleChange('email')}
+                  onBlur={handleBlur('email')}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  editable={!isLoading}
+                />
+                {touched.email && errors.email && (
+                  <Text style={styles.errorText}>{errors.email}</Text>
                 )}
+
+                <TextInput
+                  style={[
+                    styles.input,
+                    touched.password && errors.password && styles.inputError
+                  ]}
+                  placeholder="Contraseña"
+                  value={values.password}
+                  onChangeText={handleChange('password')}
+                  onBlur={handleBlur('password')}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  editable={!isLoading}
+                />
+                {touched.password && errors.password && (
+                  <Text style={styles.errorText}>{errors.password}</Text>
+                )}
+
+                <TouchableOpacity 
+                  style={[styles.button, isLoading && styles.buttonDisabled]}
+                  onPress={() => handleSubmit()}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : (
+                    <Text style={styles.buttonText}>Iniciar Sesión</Text>
+                  )}
+                </TouchableOpacity>
+
+                <View style={styles.separatorContainer}>
+                  <View style={styles.separatorLine} />
+                  <TouchableOpacity 
+                    onPress={() => {
+                      console.log("Navegando a registro desde login");
+                      router.replace('/registro');
+                    }}
+                    disabled={isLoading}
+                  >
+                    <Text style={styles.separatorText}>¿No tienes cuenta? Regístrate</Text>
+                  </TouchableOpacity>
+                  <View style={styles.separatorLine} />
+                </View>
               </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        )}
-      </LinearGradient>
-      
-      {/* Toast para mensajes de éxito */}
+            )}
+          </Formik>
+        </Animated.View>
+      </ScrollView>
+
       <Toast 
         visible={toastVisible}
         message={toastMessage}
+        type={toastType}
       />
-    </SafeAreaView>
+    </KeyboardAvoidingView>
   );
-};
-
-// Formatear fecha
-const formatDate = (dateString?: string) => {
-  if (!dateString) return '';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-ES', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
-  } catch (e) {
-    return '';
-  }
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: 'white',
   },
-  gradientBackground: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
+  scrollContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 15,
-    height: 60,
-    borderBottomWidth: 1,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  themeToggle: {
-    padding: 8,
-  },
-  scrollView: {
-    flex: 1,
+    padding: 30,
+    paddingTop: 50,
+    paddingBottom: 50,
   },
   formContainer: {
-    padding: 20,
+    width: '100%',
   },
-  profileHeader: {
-    alignItems: 'center',
-    marginBottom: 30,
+  title: {
+    fontSize: 32,
+    fontWeight: '600',
+    marginBottom: 40,
+    fontFamily: Platform.OS === 'ios' ? 'Times New Roman' : 'serif', 
   },
-  subtitle: {
-    fontSize: 16,
-    marginTop: 10,
+  description: {
+    fontSize: 14,
+    color: '#000',
     textAlign: 'center',
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginBottom: 10,
-  },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  inputGroup: {
     marginBottom: 20,
   },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 8,
-  },
   input: {
+    width: '100%',
+    padding: 14,
     borderWidth: 1,
+    borderColor: '#ccc',
     borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
     fontSize: 16,
+    marginBottom: 10,
   },
-  textArea: {
-    minHeight: 100,
-    paddingTop: 12,
+  inputError: {
+    borderColor: '#ff0000',
   },
   errorText: {
-    fontSize: 14,
-    marginTop: 4,
-  },
-  buttonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginVertical: 20,
-  },
-  saveButton: {
-    paddingVertical: 14,
-    borderRadius: 8,
-    flex: 1,
-    marginLeft: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  cancelButton: {
-    paddingVertical: 14,
-    borderRadius: 8,
-    borderWidth: 1,
-    flex: 1,
-    marginRight: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: 50,
-  },
-  loadingText: {
-    marginTop: 20,
-    fontSize: 16,
+    color: '#ff0000',
+    fontSize: 12,
+    marginBottom: 10,
   },
   errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
+    backgroundColor: '#ffebee',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#ffcdd2',
+  },
+  errorMessage: {
+    color: '#d32f2f',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  button: {
+    width: '100%',
+    backgroundColor: 'black',
+    padding: 16,
+    borderRadius: 8,
     alignItems: 'center',
-    paddingHorizontal: 30,
-    paddingBottom: 50,
+    marginTop: 10,
   },
-  loginButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 25,
+  buttonDisabled: {
+    backgroundColor: '#666',
+    opacity: 0.7,
   },
-  loginButtonText: {
+  buttonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
   },
-  footerContainer: {
-    marginTop: 20,
+  separatorContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
+    marginVertical: 20,
+    width: '100%',
   },
-  footerText: {
-    fontSize: 14,
+  separatorLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#ccc',
+  },
+  separatorText: {
+    marginHorizontal: 10,
+    color: '#007bff',
+    fontWeight: '500',
   },
   toast: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 100 : 100,
+    top: Platform.OS === 'ios' ? 50 : 30,
     alignSelf: 'center',
     paddingHorizontal: 20,
     paddingVertical: 12,
@@ -690,10 +425,9 @@ const styles = StyleSheet.create({
     maxWidth: width * 0.8,
   },
   toastText: {
+    color: 'white',
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
   },
-});
-
-export default EditProfileScreen;
+}); 

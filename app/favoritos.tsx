@@ -240,7 +240,7 @@ const FavoritosScreen = () => {
   // Función para eliminar un favorito usando el hook compartido
   const handleRemoveFavorite = async (productId: number) => {
     Alert.alert(
-      "Eliminar de favoritos",
+      "❌ Eliminar de favoritos",
       "¿Estás seguro que deseas eliminar este producto de tus favoritos?",
       [
         {
@@ -262,11 +262,19 @@ const FavoritosScreen = () => {
               setFavorites(currentFavorites => 
                 currentFavorites.filter(fav => fav.id !== productId)
               );
+
+              // Mostrar confirmación
+              Alert.alert(
+                "✅ Eliminado",
+                "El producto ha sido eliminado de tus favoritos.",
+                [{ text: "Entendido" }]
+              );
             } catch (error) {
               console.error('Error al eliminar favorito:', error);
               Alert.alert(
-                "Error",
-                "No se pudo eliminar el producto de favoritos. Inténtalo de nuevo."
+                "❌ Error",
+                "No se pudo eliminar el producto de favoritos. Por favor, inténtalo de nuevo.",
+                [{ text: "Entendido" }]
               );
             } finally {
               // Quitar el ID de la lista de "eliminando"
