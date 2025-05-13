@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -53,6 +53,13 @@ interface SearchResult extends Product {
   imagen_url?: string;
 }
 
+// Interfaz para los Toasts personalizados
+interface ToastMessage {
+  message: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  icon?: string;
+}
+
 const { width, height } = Dimensions.get('window');
 
 const ProductDetail = () => {
@@ -76,9 +83,44 @@ const ProductDetail = () => {
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<TextInput>(null);
   
+  // Estados para el toast personalizado
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const toastAnimation = useRef(new Animated.Value(0)).current;
+  const toastTimeout = useRef<NodeJS.Timeout | number | null>(null);
+  
   // Usar el hook de favoritos
   const { favoritos, loading: loadingFavoritos, esFavorito, toggleFavorito, recargarFavoritos } = useFavoritos();
-  const { addToCart, refreshLoginStatus } = useCart();
+  
+  // Usar el hook del carrito y obtener el número de items en el carrito
+  const { addToCart, refreshLoginStatus, cartItems } = useCart();
+  const cartItemCount = cartItems ? cartItems.reduce((total, item) => total + item.cantidad, 0) : 0;
+  
+  // Función para mostrar un toast personalizado
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'warning' | 'info', icon?: string) => {
+    // Limpiar cualquier timeout existente
+    if (toastTimeout.current) {
+      clearTimeout(toastTimeout.current);
+    }
+    
+    // Establecer el nuevo mensaje
+    setToast({ message, type, icon });
+    
+    // Animar la entrada del toast
+    Animated.timing(toastAnimation, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+    
+    // Configurar el timeout para ocultar el toast
+    toastTimeout.current = setTimeout(() => {
+      Animated.timing(toastAnimation, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => setToast(null));
+    }, 2000);
+  }, [toastAnimation]);
   
   // Función para buscar productos
   const searchProducts = async (query: string) => {
@@ -92,7 +134,7 @@ const ProductDetail = () => {
     setShowResults(true);
     
     try {
-      // Busca tanto en productos de hombre como de mujer
+      // Busca tanto en productos de Hombre como de mujer
       const response = await axios.get(`http://ohanatienda.ddns.net:8000/api/productos/buscar?q=${encodeURIComponent(query)}`);
       
       if (response.data && Array.isArray(response.data)) {
@@ -161,6 +203,9 @@ const ProductDetail = () => {
       if (searchTimeout.current) {
         clearTimeout(searchTimeout.current);
       }
+      if (toastTimeout.current) {
+        clearTimeout(toastTimeout.current);
+      }
     };
   }, []);
   
@@ -174,23 +219,7 @@ const ProductDetail = () => {
   
   const navigateToFavorites = () => {
     if (!isLoggedIn) {
-      Alert.alert(
-        '⭐ Favoritos',
-        'Inicia sesión para ver tus productos favoritos.',
-        [
-          { 
-            text: 'Más tarde', 
-            style: 'cancel',
-            onPress: () => console.log('Cancelar presionado')
-          },
-          { 
-            text: 'Iniciar sesión', 
-            style: 'default',
-            onPress: () => router.push('/perfil')
-          }
-        ],
-        { cancelable: true }
-      );
+      showToast('Inicia sesión para ver tus favoritos', 'info', 'heart');
       return;
     }
     
@@ -199,23 +228,7 @@ const ProductDetail = () => {
   
   const navigateToCart = () => {
     if (!isLoggedIn) {
-      Alert.alert(
-        '🛒 Carrito',
-        'Inicia sesión para ver tu carrito de compras.',
-        [
-          { 
-            text: 'Más tarde', 
-            style: 'cancel',
-            onPress: () => console.log('Cancelar presionado')
-          },
-          { 
-            text: 'Iniciar sesión', 
-            style: 'default',
-            onPress: () => router.push('/perfil')
-          }
-        ],
-        { cancelable: true }
-      );
+      showToast('Inicia sesión para ver tu carrito', 'info', 'cart');
       return;
     }
     
@@ -370,80 +383,36 @@ const ProductDetail = () => {
       precio: product.precio,
       imagen: product.imagen,
       talla: product.talla,
-      cantidad: quantity
+      cantidad: quantity // Esta es la cantidad seleccionada
     });
 
     if (!success) {
-      Alert.alert(
-        '🛒 Carrito',
-        'Para añadir productos a tu carrito necesitas iniciar sesión. ¿Deseas iniciar sesión ahora?',
-        [
-          { 
-            text: 'Más tarde', 
-            style: 'cancel'
-          },
-          { 
-            text: 'Iniciar sesión', 
-            style: 'default',
-            onPress: () => router.push('/perfil')
-          }
-        ],
-        { cancelable: true }
-      );
+      showToast('Inicia sesión para añadir productos', 'warning', 'person');
+      setTimeout(() => {
+        router.push('/perfil');
+      }, 2000);
       return;
     }
     
-    Alert.alert(
-      "Producto añadido",
-      "El producto ha sido añadido al carrito",
-      [{ text: "OK" }]
+    // Mensaje de éxito con toast personalizado
+    showToast(
+      `${quantity} ${quantity > 1 ? 'unidades' : 'unidad'} añadidas al carrito`, 
+      'success', 
+      'cart'
     );
   };
 
   const handleBuyNow = () => {
     if (!isLoggedIn) {
-      Alert.alert(
-        '💳 Compra',
-        'Para realizar una compra necesitas iniciar sesión. ¿Deseas iniciar sesión ahora?',
-        [
-          { 
-            text: 'Más tarde', 
-            style: 'cancel',
-            onPress: () => console.log('Cancelar presionado')
-          },
-          { 
-            text: 'Iniciar sesión', 
-            style: 'default',
-            onPress: () => router.push('/perfil')
-          }
-        ],
-        { cancelable: true }
-      );
+      showToast('Inicia sesión para realizar compras', 'warning', 'person');
+      setTimeout(() => {
+        router.push('/perfil');
+      }, 2000);
       return;
     }
     
-    Alert.alert(
-      "🛍️ Proceder al pago",
-      `¿Deseas continuar con la compra de ${quantity} ${quantity > 1 ? 'unidades' : 'unidad'} de ${product?.nombre}?`,
-      [
-        {
-          text: "Cancelar",
-          style: "cancel"
-        },
-        {
-          text: "Continuar",
-          style: "default",
-          onPress: () => {
-            // Aquí iría la lógica para proceder al pago
-            Alert.alert(
-              "🚧 En desarrollo",
-              "La funcionalidad de pago está en desarrollo. Pronto podrás realizar tus compras.",
-              [{ text: "Entendido" }]
-            );
-          }
-        }
-      ]
-    );
+    showToast('¡Preparando tu compra!', 'info', 'card');
+    // Aquí iría la lógica para proceder al pago
   };
 
   // Función actualizada para manejar favoritos con el hook
@@ -452,22 +421,10 @@ const ProductDetail = () => {
     
     try {
       if (!isLoggedIn) {
-        Alert.alert(
-          '⭐ Favoritos',
-          'Inicia sesión para guardar tus productos favoritos y acceder a todas las funcionalidades de la tienda.',
-          [
-            { 
-              text: 'Más tarde', 
-              style: 'cancel'
-            },
-            { 
-              text: 'Iniciar sesión', 
-              style: 'default',
-              onPress: () => router.push('/perfil')
-            },
-          ],
-          { cancelable: true }
-        );
+        showToast('Inicia sesión para guardar favoritos', 'info', 'heart');
+        setTimeout(() => {
+          router.push('/perfil');
+        }, 2000);
         return;
       }
       
@@ -477,26 +434,112 @@ const ProductDetail = () => {
         throw new Error('No se pudo identificar al usuario');
       }
       
+      const isFavorite = favoritos.includes(product.id);
+      
       // Usar el hook para manejar favoritos
       await toggleFavorito(product.id);
       
-      // Feedback visual opcional
-      if (productIsFavorite) {
-        // Feedback de eliminación
+      // Mensaje de éxito
+      if (isFavorite) {
+        showToast('Eliminado de favoritos', 'info', 'heart-outline');
       } else {
-        // Feedback de agregado
+        showToast('Añadido a favoritos', 'success', 'heart');
       }
+      
     } catch (error) {
       console.error('Error al gestionar favorito:', error);
-      Alert.alert('Error', 'No se pudo actualizar el favorito');
+      showToast('No se pudo actualizar el favorito', 'error', 'alert-circle');
     }
   };
 
-  const increaseQuantity = () => setQuantity(prev => prev + 1);
+  // Limitar la cantidad a un máximo de 5 unidades
+  const increaseQuantity = () => {
+    if (quantity < 5) {
+      setQuantity(prev => prev + 1);
+    } else {
+      showToast('Máximo 5 unidades por producto', 'warning', 'alert-circle');
+    }
+  };
+  
   const decreaseQuantity = () => setQuantity(prev => prev > 1 ? prev - 1 : 1);
 
   // Verificar si el producto actual es favorito
   const productIsFavorite = product ? favoritos.includes(product.id) : false;
+
+  // Componente Toast personalizado
+  const renderToast = () => {
+    if (!toast) return null;
+    
+    const translateY = toastAnimation.interpolate({
+      inputRange: [0, 1],
+      outputRange: [-100, 0],
+    });
+    
+    // Determinar color de fondo según tipo
+    let backgroundColor = '#4CAF50'; // success - verde
+
+    // Solo permitir iconos válidos de Ionicons
+    type IoniconName =
+      | 'checkmark-circle'
+      | 'close-circle'
+      | 'warning'
+      | 'information-circle'
+      | 'heart'
+      | 'heart-outline'
+      | 'person'
+      | 'cart'
+      | 'alert-circle'
+      | 'card'
+      | 'share-outline';
+
+    let iconName: IoniconName = 'checkmark-circle';
+
+    if (toast.type === 'error') {
+      backgroundColor = '#F44336'; // rojo
+      iconName = 'close-circle';
+    } else if (toast.type === 'warning') {
+      backgroundColor = '#FF9800'; // naranja
+      iconName = 'warning';
+    } else if (toast.type === 'info') {
+      backgroundColor = '#2196F3'; // azul
+      iconName = 'information-circle';
+    }
+
+    // Si toast.icon es uno de los permitidos, úsalo
+    const allowedIcons: IoniconName[] = [
+      'checkmark-circle',
+      'close-circle',
+      'warning',
+      'information-circle',
+      'heart',
+      'heart-outline',
+      'person',
+      'cart',
+      'alert-circle',
+      'card',
+      'share-outline',
+    ];
+    if (toast.icon && allowedIcons.includes(toast.icon as IoniconName)) {
+      iconName = toast.icon as IoniconName;
+    }
+    
+    return (
+      <Animated.View 
+        style={[
+          styles.toast,
+          { 
+            transform: [{ translateY }],
+            backgroundColor 
+          }
+        ]}
+      >
+        <View style={styles.toastContent}>
+          <Ionicons name={iconName} size={24} color="#fff" />
+          <Text style={styles.toastText}>{toast.message}</Text>
+        </View>
+      </Animated.View>
+    );
+  };
 
   return (
     <>
@@ -510,6 +553,9 @@ const ProductDetail = () => {
       
       <SafeAreaView style={styles.container}>
         <StatusBar style="dark" />
+        
+        {/* Renderizar el toast personalizado */}
+        {renderToast()}
         
         {/* Header minimalista */}
         <View style={styles.header}>
@@ -583,9 +629,9 @@ const ProductDetail = () => {
                   onPress={navigateToCart}
                 >
                   <Feather name="shopping-bag" size={20} color="#000" />
-                  {isLoggedIn && (
+                  {isLoggedIn && cartItemCount > 0 && (
                     <View style={styles.cartBadge}>
-                      <Text style={styles.cartBadgeText}>0</Text>
+                      <Text style={styles.cartBadgeText}>{cartItemCount}</Text>
                     </View>
                   )}
                 </TouchableOpacity>
@@ -790,7 +836,7 @@ const ProductDetail = () => {
                 
                 {/* Selector de cantidad */}
                 <View style={styles.quantitySection}>
-                  <Text style={styles.sectionLabel}>Cantidad</Text>
+                  <Text style={styles.sectionLabel}>Cantidad (máx. 5)</Text>
                   <View style={styles.quantityControls}>
                     <TouchableOpacity 
                       style={[styles.quantityButton, quantity === 1 && styles.quantityButtonDisabled]}
@@ -803,10 +849,11 @@ const ProductDetail = () => {
                     <Text style={styles.quantityValueText}>{quantity}</Text>
                     
                     <TouchableOpacity 
-                      style={styles.quantityButton}
+                      style={[styles.quantityButton, quantity === 5 && styles.quantityButtonDisabled]}
                       onPress={increaseQuantity}
+                      disabled={quantity === 5}
                     >
-                      <Feather name="plus" size={16} color="#000" />
+                      <Feather name="plus" size={16} color={quantity === 5 ? "#ccc" : "#000"} />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -885,12 +932,12 @@ const ProductDetail = () => {
             <View style={styles.bottomActionPanel}>
               <TouchableOpacity
                 style={styles.favoriteButton}
-                onPress={() => product && toggleFavorito(product.id)}
+                onPress={handleToggleFavorite}
               >
                 <Ionicons 
-                  name={product && esFavorito(product.id) ? "heart" : "heart-outline"} 
+                  name={productIsFavorite ? "heart" : "heart-outline"} 
                   size={24} 
-                  color={product && esFavorito(product.id) ? "#ff4444" : "#000"} 
+                  color={productIsFavorite ? "#ff4444" : "#000"} 
                 />
               </TouchableOpacity>
               
@@ -1389,7 +1436,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#EEE',
-  }
+  },
+  // Estilos para el toast personalizado
+  toast: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 40,
+    left: 20,
+    right: 20,
+    zIndex: 9999,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
+  toastContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  toastText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 10,
+    flex: 1,
+  },
 });
 
 export default ProductDetail;

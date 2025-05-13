@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -13,7 +13,9 @@ import {
   Dimensions,
   Platform,
   Alert,
-  Keyboard
+  Keyboard,
+  Animated,
+  Easing
 } from 'react-native';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -21,6 +23,7 @@ import axios from 'axios';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFavoritos } from '../hooks/useFavoritos';
+import { useCart } from '../hooks/useCart';
 
 type Gender = 'hombre' | 'mujer' | null;
 
@@ -38,6 +41,13 @@ interface Product {
 interface Category {
   id: number;
   nombre_cat: string;
+}
+
+// Interfaz para los Toasts personalizados
+interface ToastMessage {
+  message: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  icon?: string;
 }
 
 const { width } = Dimensions.get('window');
@@ -72,10 +82,168 @@ export default function TiendaScreen() {
   const [isChangingCategory, setIsChangingCategory] = useState(false);
   const [paramsProcessed, setParamsProcessed] = useState(false);
   
+  // Estados para el toast personalizado
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const toastAnimation = useRef(new Animated.Value(0)).current;
+  const toastTimeout = useRef<NodeJS.Timeout | number | null>(null);
+  
+  // Estados para animación del spinner
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim1 = useRef(new Animated.Value(0)).current;
+  const scaleAnim2 = useRef(new Animated.Value(0)).current;
+  const scaleAnim3 = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  
   // Usar el hook de favoritos
   const { favoritos, loading: loadingFavoritos, esFavorito, toggleFavorito } = useFavoritos();
+  
+  // Usar el hook del carrito
+  const { addToCart, refreshLoginStatus } = useCart();
 
   const availableSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+
+  // Animación del nuevo spinner
+  useEffect(() => {
+    if (isLoadingAllProducts) {
+      // Mostrar con fade in
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic)
+      }).start();
+      
+      // Rotación infinita
+      Animated.loop(
+        Animated.timing(rotateAnim, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.linear,
+          useNativeDriver: true
+        })
+      ).start();
+      
+      // Pulso del logo
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.2,
+            duration: 1000,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true
+          })
+        ])
+      ).start();
+      
+      // Animación secuencial de los círculos
+      const startCircleAnimations = () => {
+        Animated.stagger(200, [
+          // Primer círculo
+          Animated.sequence([
+            Animated.timing(scaleAnim1, {
+              toValue: 1,
+              duration: 600,
+              easing: Easing.out(Easing.back(1)),
+              useNativeDriver: true
+            }),
+            Animated.timing(scaleAnim1, {
+              toValue: 0.6,
+              duration: 600,
+              easing: Easing.in(Easing.cubic),
+              useNativeDriver: true
+            })
+          ]),
+          // Segundo círculo
+          Animated.sequence([
+            Animated.timing(scaleAnim2, {
+              toValue: 1,
+              duration: 600,
+              easing: Easing.out(Easing.back(1)),
+              useNativeDriver: true
+            }),
+            Animated.timing(scaleAnim2, {
+              toValue: 0.6,
+              duration: 600,
+              easing: Easing.in(Easing.cubic),
+              useNativeDriver: true
+            })
+          ]),
+          // Tercer círculo
+          Animated.sequence([
+            Animated.timing(scaleAnim3, {
+              toValue: 1,
+              duration: 600,
+              easing: Easing.out(Easing.back(1)),
+              useNativeDriver: true
+            }),
+            Animated.timing(scaleAnim3, {
+              toValue: 0.6,
+              duration: 600,
+              easing: Easing.in(Easing.cubic),
+              useNativeDriver: true
+            })
+          ])
+        ]).start(() => {
+          // Reiniciar la animación
+          startCircleAnimations();
+        });
+      };
+      
+      // Iniciar animaciones de los círculos
+      scaleAnim1.setValue(0.6);
+      scaleAnim2.setValue(0.6);
+      scaleAnim3.setValue(0.6);
+      startCircleAnimations();
+    } else {
+      // Ocultar con fade out
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true
+      }).start(() => {
+        // Reset valores
+        rotateAnim.setValue(0);
+        pulseAnim.setValue(1);
+        scaleAnim1.setValue(0.6);
+        scaleAnim2.setValue(0.6);
+        scaleAnim3.setValue(0.6);
+      });
+    }
+  }, [isLoadingAllProducts]);
+
+  // Función para mostrar un toast personalizado
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'warning' | 'info', icon?: string) => {
+    // Limpiar cualquier timeout existente
+    if (toastTimeout.current) {
+      clearTimeout(toastTimeout.current);
+    }
+    
+    // Establecer el nuevo mensaje
+    setToast({ message, type, icon });
+    
+    // Animar la entrada del toast
+    Animated.timing(toastAnimation, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+    
+    // Configurar el timeout para ocultar el toast
+    toastTimeout.current = setTimeout(() => {
+      Animated.timing(toastAnimation, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => setToast(null));
+    }, 2000);
+  }, [toastAnimation]);
 
   // Verificar estado de sesión
   const checkLoginStatus = async () => {
@@ -113,20 +281,52 @@ export default function TiendaScreen() {
       // Si está logueado, toggle favorito directamente
       await toggleFavorito(productId);
       
-      // Mostrar feedback al usuario
+      // Verificar el nuevo estado y mostrar el toast
       const isFav = await esFavorito(productId);
-      Alert.alert(
-        isFav ? "✅ Añadido a favoritos" : "❌ Eliminado de favoritos",
-        isFav ? "El producto ha sido añadido a tus favoritos" : "El producto ha sido eliminado de tus favoritos",
-        [{ text: "Entendido" }]
-      );
+      
+      if (isFav) {
+        showToast('Eliminado de favoritos', 'success', 'heart');
+      } else {
+        showToast('Añadido a favoritos', 'info', 'heart-outline');
+      }
+      
     } catch (error) {
       console.error('Error al gestionar favorito:', error);
-      Alert.alert(
-        "❌ Error",
-        "No se pudo actualizar el favorito. Por favor, inténtalo de nuevo.",
-        [{ text: "Entendido" }]
-      );
+      showToast('No se pudo actualizar el favorito', 'error', 'alert-circle');
+    }
+  };
+
+  // Función mejorada para añadir al carrito (similar a la de detalles.tsx)
+  const handleAddToCart = async (product: Product) => {
+    try {
+      // Actualizar el estado de inicio de sesión antes de intentar añadir al carrito
+      await refreshLoginStatus();
+      
+      // Cantidad por defecto para añadir desde la vista de tienda
+      const quantity = 1;
+      
+      const success = await addToCart({
+        id: product.id,
+        nombre: product.nombre,
+        precio: product.precio,
+        imagen: product.imagen,
+        talla: product.talla || '', // Usar string vacío si no hay talla
+        cantidad: quantity
+      });
+  
+      if (!success) {
+        showToast('Inicia sesión para añadir productos', 'warning', 'person');
+        setTimeout(() => {
+          router.push('/perfil');
+        }, 2000);
+        return;
+      }
+      
+      // Mensaje de éxito con toast personalizado
+      showToast(`Producto añadido al carrito`, 'success', 'cart');
+    } catch (error) {
+      console.error('Error al añadir al carrito:', error);
+      showToast('Error al añadir al carrito', 'error', 'close-circle');
     }
   };
 
@@ -152,6 +352,9 @@ export default function TiendaScreen() {
       
       return () => {
         // Limpiar al salir de la pantalla
+        if (toastTimeout.current) {
+          clearTimeout(toastTimeout.current);
+        }
       };
     }, [])
   );
@@ -211,86 +414,7 @@ export default function TiendaScreen() {
     }
   }, [params, paramsProcessed]);
 
-  // Cargar productos básica - para paginación inicial
-  const fetchProducts = async (page: number = 1) => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/productos?page=${page}`);
-      if (response.data && response.data.data) {
-        const newProducts = response.data.data;
-        if (page === 1) {
-          setDisplayedProducts(newProducts);
-        } else {
-          setDisplayedProducts(prev => [...prev, ...newProducts]);
-        }
-        
-        setHasMoreProducts(newProducts.length === 6);
-      }
-    } catch (error) {
-      console.error('Error fetching products:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadMoreProducts = () => {
-    if (!loading && hasMoreProducts) {
-      setLoading(true);
-      const nextPage = currentPage + 1;
-      setCurrentPage(nextPage);
-      fetchProducts(nextPage);
-    }
-  };
-
-  const handleGenderSelect = (gender: Gender) => {
-    setSelectedGender(gender);
-    setCurrentPage(1);
-    setHasMoreProducts(true);
-    setDisplayedProducts([]);
-    setFilteredProducts([]);
-    setAllProducts([]);
-    setSearchQuery('');
-  };
-
-  const handleAddToCart = (product: Product) => {
-    if (!isLoggedIn) {
-      Alert.alert(
-        '🛒 Carrito',
-        'Para añadir productos a tu carrito necesitas iniciar sesión. ¿Deseas iniciar sesión ahora?',
-        [
-          { 
-            text: 'Más tarde', 
-            style: 'cancel',
-            onPress: () => console.log('Cancelar presionado')
-          },
-          { 
-            text: 'Iniciar sesión', 
-            style: 'default',
-            onPress: () => router.push('/perfil')
-          }
-        ],
-        { cancelable: true }
-      );
-      return;
-    }
-    
-    Alert.alert(
-      "✅ Producto añadido",
-      `El producto "${product.nombre}" ha sido añadido al carrito.`,
-      [
-        { 
-          text: "Seguir comprando",
-          style: "cancel"
-        },
-        { 
-          text: "Ir al carrito",
-          style: "default",
-          onPress: () => router.push('/(tabs)/carrito')
-        }
-      ]
-    );
-  };
-
-  // Función optimizada para cargar todos los productos
+  // Función mejorada para cargar todos los productos sin paginación y sin toasts
   const loadAllProducts = useCallback(async () => {
     if (!selectedGender) return;
 
@@ -298,36 +422,64 @@ export default function TiendaScreen() {
     setLoading(true);
     
     try {
-      // Cargar productos del género seleccionado
-      const genderResponse = await axios.get(`${API_BASE_URL}/api/productos/genero/${selectedGender}`);
+      // Arrays para almacenar todos los productos
+      let allGenderProducts: Product[] = [];
+      let allUnisexProducts: Product[] = [];
       
-      // Cargar productos unisex
-      const unisexResponse = await axios.get(`${API_BASE_URL}/api/productos/genero/unisex`);
+      // Cargar todos los productos del género seleccionado (todas las páginas)
+      let genderNextPageUrl = `${API_BASE_URL}/api/productos/genero/${selectedGender}`;
+      let pageCount = 0;
       
-      // Combinar resultados
-      let allProductsData: Product[] = [];
-      let hasMorePages = false;
-      
-      if (genderResponse.data && genderResponse.data.data) {
-        allProductsData = [...genderResponse.data.data];
-        hasMorePages = genderResponse.data.next_page_url !== null;
+      while (genderNextPageUrl && pageCount < 10) { // Límite de seguridad de 10 páginas
+        pageCount++;
+        
+        const genderResponse = await axios.get(genderNextPageUrl);
+        
+        if (genderResponse.data && genderResponse.data.data) {
+          // Añadir productos de esta página al array total
+          allGenderProducts = [...allGenderProducts, ...genderResponse.data.data];
+          // Verificar si hay siguiente página
+          genderNextPageUrl = genderResponse.data.next_page_url;
+        } else {
+          genderNextPageUrl = '';
+        }
       }
       
-      if (unisexResponse.data && unisexResponse.data.data) {
-        const existingIds = new Set(allProductsData.map(p => p.id));
+      // Cargar todos los productos unisex (todas las páginas)
+      let unisexNextPageUrl = `${API_BASE_URL}/api/productos/genero/unisex`;
+      pageCount = 0;
+      
+      while (unisexNextPageUrl && pageCount < 10) { // Límite de seguridad de 10 páginas
+        pageCount++;
         
-        const uniqueUnisexProducts = unisexResponse.data.data.filter(
-          (p: Product) => !existingIds.has(p.id)
-        );
+        const unisexResponse = await axios.get(unisexNextPageUrl);
         
-        allProductsData = [...allProductsData, ...uniqueUnisexProducts];
-        hasMorePages = hasMorePages || unisexResponse.data.next_page_url !== null;
+        if (unisexResponse.data && unisexResponse.data.data) {
+          // Añadir productos de esta página al array total
+          allUnisexProducts = [...allUnisexProducts, ...unisexResponse.data.data];
+          // Verificar si hay siguiente página
+          unisexNextPageUrl = unisexResponse.data.next_page_url;
+        } else {
+          unisexNextPageUrl = '';
+        }
       }
+      
+      // Filtrar duplicados al combinar los arrays
+      const existingIds = new Set(allGenderProducts.map(p => p.id));
+      const uniqueUnisexProducts = allUnisexProducts.filter(
+        (p: Product) => !existingIds.has(p.id)
+      );
+      
+      // Combinar todos los productos
+      const allProductsData = [...allGenderProducts, ...uniqueUnisexProducts];
       
       setAllProducts(allProductsData);
       setFilteredProducts(allProductsData); 
       setDisplayedProducts(allProductsData);
-      setHasMoreProducts(hasMorePages && allProductsData.length >= 6);
+      setHasMoreProducts(false); // Ya no necesitamos más paginación
+      
+      console.log(`Cargados ${allProductsData.length} productos en total (${allGenderProducts.length} ${selectedGender} + ${uniqueUnisexProducts.length} unisex)`);
+      
     } catch (error) {
       console.error('Error loading products:', error);
       setAllProducts([]);
@@ -529,6 +681,118 @@ export default function TiendaScreen() {
     setExpandedFilter(expandedFilter === filterName ? null : filterName);
   };
 
+  // Componente Toast personalizado
+  const renderToast = () => {
+    if (!toast) return null;
+    
+    const translateY = toastAnimation.interpolate({
+      inputRange: [0, 1],
+      outputRange: [-100, 0],
+    });
+    
+    // Determinar color de fondo según tipo
+    let backgroundColor = '#4CAF50'; // success - verde
+    let iconName = toast.icon || 'checkmark-circle';
+    
+    if (toast.type === 'error') {
+      backgroundColor = '#F44336'; // rojo
+      iconName = toast.icon || 'close-circle';
+    } else if (toast.type === 'warning') {
+      backgroundColor = '#FF9800'; // naranja
+      iconName = toast.icon || 'warning';
+    } else if (toast.type === 'info') {
+      backgroundColor = '#2196F3'; // azul
+      iconName = toast.icon || 'information-circle';
+    }
+    
+    return (
+      <Animated.View 
+        style={[
+          styles.toast,
+          { 
+            transform: [{ translateY }],
+            backgroundColor 
+          }
+        ]}
+      >
+        <View style={styles.toastContent}>
+          <Ionicons name={iconName as any} size={24} color="#fff" />
+          <Text style={styles.toastText}>{toast.message}</Text>
+        </View>
+      </Animated.View>
+    );
+  };
+
+  // Nuevo Spinner elegante
+  const renderLoadingSpinner = () => {
+    if (!isLoadingAllProducts) return null;
+    
+    // Crear animación de rotación
+    const rotate = rotateAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0deg', '360deg']
+    });
+    
+    return (
+      <Animated.View 
+        style={[
+          styles.loadingOverlay,
+          { opacity: fadeAnim }
+        ]}
+      >
+        <View style={styles.loaderContainer}>
+          {/* Anillo exterior rotatorio */}
+          <Animated.View 
+            style={[
+              styles.rotatingRing, 
+              { transform: [{ rotate }] }
+            ]}
+          />
+          
+          {/* Círculos pulsantes */}
+          <View style={styles.circlesContainer}>
+            <Animated.View 
+              style={[
+                styles.loadingCircle, 
+                styles.circle1,
+                { transform: [{ scale: scaleAnim1 }] }
+              ]} 
+            />
+            <Animated.View 
+              style={[
+                styles.loadingCircle, 
+                styles.circle2,
+                { transform: [{ scale: scaleAnim2 }] }
+              ]} 
+            />
+            <Animated.View 
+              style={[
+                styles.loadingCircle, 
+                styles.circle3,
+                { transform: [{ scale: scaleAnim3 }] }
+              ]} 
+            />
+          </View>
+          
+          {/* Logo central */}
+          <Animated.View 
+            style={[
+              styles.logoContainer,
+              { transform: [{ scale: pulseAnim }] }
+            ]}
+          >
+            <FontAwesome5 name="shopping-bag" size={32} color="#fff" />
+          </Animated.View>
+          
+          {/* Texto */}
+          <View style={styles.loaderTextContainer}>
+            <Text style={styles.loaderText}>Cargando colección</Text>
+          </View>
+        </View>
+      </Animated.View>
+    );
+  };
+
   // Componentes de UI
   const renderFilterSection = (title: string, content: React.ReactNode) => (
     <View style={styles.filterSection}>
@@ -699,29 +963,6 @@ export default function TiendaScreen() {
     );
   };
 
-  const renderFooter = () => {
-    if (!hasMoreProducts) return null;
-    
-    return (
-      <View style={styles.footerContainer}>
-        <TouchableOpacity 
-          style={styles.loadMoreButton}
-          onPress={loadMoreProducts}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator size="large" color="#fff" />
-          ) : (
-            <>
-              <FontAwesome5 name="chevron-down" size={16} color="#fff" />
-              <Text style={styles.loadMoreText}>Ver más productos</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
   const renderHeader = () => (
     <View style={styles.header}>
       <TouchableOpacity 
@@ -744,12 +985,29 @@ export default function TiendaScreen() {
     </View>
   );
 
+  // Función para manejar la selección de género
+  const handleGenderSelect = (gender: Gender) => {
+    setSelectedGender(gender);
+    setLoading(true);
+    setIsChangingCategory(true);
+    setTimeout(() => {
+      setIsChangingCategory(false);
+      setLoading(false);
+    }, 100); // Pequeño delay para UX
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
         colors={['#ffffff', '#f8f8f8']}
         style={styles.gradientBackground}
       >
+        {/* Toast personalizado */}
+        {renderToast()}
+        
+        {/* Spinner elegante */}
+        {renderLoadingSpinner()}
+        
         {!selectedGender ? (
           <View style={styles.genderSelection}>
             <Text style={styles.title}>
@@ -819,9 +1077,6 @@ export default function TiendaScreen() {
                 contentContainerStyle={styles.productsList}
                 showsVerticalScrollIndicator={false}
                 columnWrapperStyle={styles.columnWrapper}
-                ListFooterComponent={searchQuery ? null : renderFooter}
-                onEndReached={searchQuery ? null : loadMoreProducts}
-                onEndReachedThreshold={0.5}
                 ListEmptyComponent={
                   !loading ? (
                     <View style={styles.emptyContainer}>
@@ -838,7 +1093,6 @@ export default function TiendaScreen() {
   );
 }
 
-// Mantenemos el mismo objeto de estilos
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1134,35 +1388,129 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 300,
   },
-  footerContainer: {
-    padding: 20,
+  // Estilos para el nuevo spinner
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 1000,
   },
-  loadMoreButton: {
-    flexDirection: 'row',
+  loaderContainer: {
+    width: 220,
+    height: 220,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#000',
-    padding: 15,
-    borderRadius: 25,
-    width: '90%',
+    position: 'relative',
+  },
+  rotatingRing: {
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    borderWidth: 8,
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderTopColor: '#fff',
+    borderLeftColor: 'rgba(255,255,255,0.8)',
+    position: 'absolute',
+  },
+  logoContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#121212',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
       },
       android: {
-        elevation: 5,
+        elevation: 8,
       },
     }),
   },
-  loadMoreText: {
+  circlesContainer: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingCircle: {
+    position: 'absolute',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
+  circle1: {
+    backgroundColor: '#ff3366',
+    top: 30,
+  },
+  circle2: {
+    backgroundColor: '#50E3C2',
+    bottom: 30,
+    left: 40,
+  }, 
+  circle3: {
+    backgroundColor: '#FFCC33',
+    bottom: 30,
+    right: 40,
+  },
+  loaderTextContainer: {
+    position: 'absolute',
+    bottom: 30,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 30,
+  },
+  loaderText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  // Estilos para el toast personalizado
+  toast: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 100 : 40,
+    left: 20,
+    right: 20,
+    zIndex: 9999,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
+  toastContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  toastText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
     marginLeft: 10,
+    flex: 1,
   },
   searchBarContainer: {
     flexDirection: 'row',

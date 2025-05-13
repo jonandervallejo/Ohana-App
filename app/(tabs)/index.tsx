@@ -581,7 +581,7 @@ const HomeScreen = () => {
     setShowResults(true);
     
     try {
-      // Busca tanto en productos de hombre como de mujer
+      // Busca tanto en productos de Hombre como de Mujer
       const response = await axios.get(`${API_BASE_URL}/api/productos/buscar?q=${encodeURIComponent(query)}`);
       
       if (response.data && Array.isArray(response.data)) {
@@ -920,291 +920,295 @@ const HomeScreen = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <LinearGradient
-        colors={['#f8f8f8', '#ffffff']}
-        style={styles.gradientBackground}
-      >
-        {/* Header fijo */}
-        <View style={styles.fixedHeader}>
-          <View style={styles.headerContainer}>
-            <TouchableOpacity onPress={() => router.push('/(tabs)')}>
-              <Image 
-                source={require('@/assets/images/ohanalogo.jpg')} 
-                style={styles.headerLogo}
-                borderRadius={25}
-              />
-            </TouchableOpacity>
-            <View style={styles.searchContainer}>
-              <FontAwesome5 name="search" size={16} color="#666" style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Buscar productos"
-                placeholderTextColor="#666"
-                value={searchQuery}
-                onChangeText={handleSearchChange}
-                onFocus={() => {
-                  if (searchQuery.trim() !== '') {
-                    setShowResults(true);
-                  }
-                }}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity 
-                  onPress={() => {
-                    setSearchQuery('');
-                    setSearchResults([]);
-                    setShowResults(false);
-                  }}
-                  style={styles.clearButton}
-                >
-                  <FontAwesome5 name="times" size={16} color="#666" />
-                </TouchableOpacity>
-              )}
-            </View>
-            
-            {/* Nuevo componente UserAvatar reemplaza el avatar anterior */}
-            <UserAvatar 
-              isAuthenticated={isAuthenticated}
-              userData={userData}
-              onPress={handleProfileNavigation}
+  <SafeAreaView style={styles.safeArea}>
+    <Stack.Screen options={{ headerShown: false }} />
+    <LinearGradient
+      colors={['#f8f8f8', '#ffffff']}
+      style={styles.gradientBackground}
+    >
+      {/* Header fijo */}
+      <View style={styles.fixedHeader}>
+        <View style={styles.headerContainer}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)')}>
+            <Image 
+              source={require('@/assets/images/ohanalogo.jpg')} 
+              style={styles.headerLogo}
+              borderRadius={25}
             />
+          </TouchableOpacity>
+          <View style={styles.searchContainer}>
+            <FontAwesome5 name="search" size={16} color="#666" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar productos"
+              placeholderTextColor="#666"
+              value={searchQuery}
+              onChangeText={handleSearchChange}
+              onFocus={() => {
+                if (searchQuery.trim() !== '') {
+                  setShowResults(true);
+                }
+              }}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity 
+                onPress={() => {
+                  setSearchQuery('');
+                  setSearchResults([]);
+                  setShowResults(false);
+                }}
+                style={styles.clearButton}
+              >
+                <FontAwesome5 name="times" size={16} color="#666" />
+              </TouchableOpacity>
+            )}
           </View>
           
-          {/* Resultados de búsqueda */}
-          {showResults && (
-            <View style={styles.searchResultsContainer}>
-              {isSearching ? (
-                <View style={styles.loadingResults}>
-                  <ActivityIndicator size="small" color="#007AFF" />
-                  <Text style={styles.loadingText}>Buscando...</Text>
-                </View>
-              ) : searchResults.length === 0 ? (
-                <Text style={styles.noResultsText}>
-                  {searchQuery.trim() !== '' ? 'No se encontraron productos' : ''}
-                </Text>
-              ) : (
-                <FlatList
-                  data={searchResults.slice(0, 6)} // Mostrar máximo 6 resultados
-                  keyExtractor={(item) => item.id.toString()}
-                  renderItem={({ item }) => {
-                    const imageUrl = item.imagen_url || normalizeImageUrl(item.imagen);
-                    
-                    return (
-                      <TouchableOpacity
-                        style={styles.searchResultItem}
-                        onPress={() => handleProductSelect(item)}
-                      >
-                        <SafeImage
-                          source={{ uri: imageUrl }}
-                          style={styles.searchResultImage}
-                          resizeMode="cover"
-                          imageKey={`search-${item.id}`}
-                        />
-                        <View style={styles.searchResultInfo}>
-                          <Text style={styles.searchResultName} numberOfLines={1}>
-                            {item.nombre}
-                          </Text>
-                          <Text style={styles.searchResultPrice}>
-                            {formatPrice(item.precio)}
-                          </Text>
-                        </View>
-                        <FontAwesome5 name="chevron-right" size={12} color="#999" />
-                      </TouchableOpacity>
-                    );
-                  }}
-                  style={styles.searchResultsList}
-                  showsVerticalScrollIndicator={false}
-                  ListFooterComponent={
-                    searchResults.length > 6 ? (
-                      <TouchableOpacity
-                        style={styles.viewAllContainer}
-                        onPress={() => {
-                          router.push({
-                            pathname: '/(tabs)/tienda',
-                            params: { 
-                              searchQuery: searchQuery,
-                              timestamp: Date.now()
-                            }
-                          });
-                          setShowResults(false);
-                          setSearchQuery('');
-                        }}
-                      >
-                        <Text style={styles.viewAllText}>
-                          Ver todos los resultados ({searchResults.length})
+          {/* Componente UserAvatar */}
+          <UserAvatar 
+            isAuthenticated={isAuthenticated}
+            userData={userData}
+            onPress={handleProfileNavigation}
+          />
+        </View>
+        
+        {/* Resultados de búsqueda */}
+        {showResults && (
+          <View style={styles.searchResultsContainer}>
+            {isSearching ? (
+              <View style={styles.loadingResults}>
+                <ActivityIndicator size="small" color="#007AFF" />
+                <Text style={styles.loadingText}>Buscando...</Text>
+              </View>
+            ) : searchResults.length === 0 ? (
+              <Text style={styles.noResultsText}>
+                {searchQuery.trim() !== '' ? 'No se encontraron productos' : ''}
+              </Text>
+            ) : (
+              <FlatList
+                data={searchResults.slice(0, 6)} // Mostrar máximo 6 resultados
+                keyExtractor={(item) => item.id.toString()}
+                renderItem={({ item }) => {
+                  const imageUrl = item.imagen_url || normalizeImageUrl(item.imagen);
+                  
+                  return (
+                    <TouchableOpacity
+                      style={styles.searchResultItem}
+                      onPress={() => handleProductSelect(item)}
+                    >
+                      <SafeImage
+                        source={{ uri: imageUrl }}
+                        style={styles.searchResultImage}
+                        resizeMode="cover"
+                        imageKey={`search-${item.id}`}
+                      />
+                      <View style={styles.searchResultInfo}>
+                        <Text style={styles.searchResultName} numberOfLines={1}>
+                          {item.nombre}
                         </Text>
-                        <FontAwesome5 name="arrow-right" size={12} color="#007AFF" />
-                      </TouchableOpacity>
-                    ) : null
-                  }
-                />
-              )}
+                        <Text style={styles.searchResultPrice}>
+                          {formatPrice(item.precio)}
+                        </Text>
+                      </View>
+                      <FontAwesome5 name="chevron-right" size={12} color="#999" />
+                    </TouchableOpacity>
+                  );
+                }}
+                style={styles.searchResultsList}
+                showsVerticalScrollIndicator={false}
+                ListFooterComponent={
+                  searchResults.length > 6 ? (
+                    <TouchableOpacity
+                      style={styles.viewAllContainer}
+                      onPress={() => {
+                        router.push({
+                          pathname: '/(tabs)/tienda',
+                          params: { 
+                            searchQuery: searchQuery,
+                            timestamp: Date.now()
+                          }
+                        });
+                        setShowResults(false);
+                        setSearchQuery('');
+                      }}
+                    >
+                      <Text style={styles.viewAllText}>
+                        Ver todos los resultados ({searchResults.length})
+                      </Text>
+                      <FontAwesome5 name="arrow-right" size={12} color="#007AFF" />
+                    </TouchableOpacity>
+                  ) : null
+                }
+              />
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* Overlay para cerrar resultados al hacer clic fuera */}
+      {showResults && (
+        <Pressable
+          style={styles.overlay}
+          onPress={handlePressOutside}
+        />
+      )}
+
+      <ScrollView 
+        ref={mainScrollRef}
+        style={styles.mainScrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: 70 } // Espacio para compensar el header fijo
+        ]}
+        onScrollBeginDrag={() => {
+          Keyboard.dismiss();
+          setShowResults(false);
+        }}
+      >
+        {/* Carrusel */}
+        <Carrusel scrollRef={carruselScrollRef as React.RefObject<ScrollView>} />
+
+        {/* Sección de Categorías */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Categorías</Text>
+            <TouchableOpacity onPress={() => router.push({
+              pathname: '/(tabs)/tienda',
+              params: { timestamp: Date.now() } // Añadir timestamp para forzar reset
+            })}>
+              <Text style={styles.seeAll}>Ver todo</Text>
+            </TouchableOpacity>
+          </View>
+          {loadingCategories ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#0000ff" />
             </View>
+          ) : errorCategories ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{errorCategories}</Text>
+              <TouchableOpacity 
+                style={styles.retryButton}
+                onPress={() => {
+                  setLoadingCategories(true);
+                  setErrorCategories(null);
+                  ImageCache.reset(); // Resetear caché al reintentar
+                  fetchCategories();
+                }}
+              >
+                <Text style={styles.retryButtonText}>Reintentar</Text>
+              </TouchableOpacity>
+            </View>
+          ) : categories.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No hay categorías disponibles</Text>
+            </View>
+          ) : (
+            <ScrollView 
+              ref={categoriesScrollRef}
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoriesContainer}
+              onScroll={handleCategoriesScroll}
+              scrollEventThrottle={16}
+            >
+              {infiniteCategories.map((category, index) => (
+                <TouchableOpacity 
+                  key={category.key || `${category.id}-${index}`} 
+                  style={styles.categoryItem}
+                  onPress={() => handleCategoryPress(category.nombre_cat, category.id)}
+                >
+                  <View style={styles.categoryImageWrapper}>
+                    <Image 
+                      source={getCategoryImage(category.nombre_cat)} 
+                      style={styles.categoryImage}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.categoryOverlay} />
+                  </View>
+                  <Text style={styles.categoryName} numberOfLines={1}>
+                    {category.nombre_cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           )}
         </View>
 
-        {/* Overlay para cerrar resultados al hacer clic fuera */}
-        {showResults && (
-          <Pressable
-            style={styles.overlay}
-            onPress={handlePressOutside}
-          />
-        )}
-
-        <ScrollView 
-          ref={mainScrollRef}
-          style={styles.mainScrollView}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          onScrollBeginDrag={() => {
-            Keyboard.dismiss();
-            setShowResults(false);
-          }}
-        >
-          {/* Carrusel */}
-          <Carrusel scrollRef={carruselScrollRef as React.RefObject<ScrollView>} />
-
-          {/* Sección de Categorías */}
-          <View style={styles.sectionContainer}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Categorías</Text>
-              <TouchableOpacity onPress={() => router.push({
-                pathname: '/(tabs)/tienda',
-                params: { timestamp: Date.now() } // Añadir timestamp para forzar reset
-              })}>
-                <Text style={styles.seeAll}>Ver todo</Text>
+        {/* Sección de Productos */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Productos Destacados</Text>
+            <TouchableOpacity onPress={() => router.push({
+              pathname: '/(tabs)/tienda',
+              params: { timestamp: Date.now() } // Añadir timestamp para forzar reset
+            })}>
+              <Text style={styles.seeAll}>Ver todo</Text>
+            </TouchableOpacity>
+          </View>
+          {loadingProducts ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#0000ff" />
+            </View>
+          ) : errorProducts ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{errorProducts}</Text>
+              <TouchableOpacity 
+                style={styles.retryButton}
+                onPress={() => {
+                  setLoadingProducts(true);
+                  setErrorProducts(null);
+                  ImageCache.reset(); // Resetear caché al reintentar
+                  fetchProducts();
+                }}
+              >
+                <Text style={styles.retryButtonText}>Reintentar</Text>
               </TouchableOpacity>
             </View>
-            {loadingCategories ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#0000ff" />
-              </View>
-            ) : errorCategories ? (
-              <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>{errorCategories}</Text>
+          ) : products.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No hay productos disponibles</Text>
+            </View>
+          ) : (
+            <ScrollView 
+              ref={productsScrollRef}
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.productsContainer}
+              onScroll={handleProductsScroll}
+              scrollEventThrottle={16}
+            >
+              {infiniteProducts.map((product, index) => (
                 <TouchableOpacity 
-                  style={styles.retryButton}
-                  onPress={() => {
-                    setLoadingCategories(true);
-                    setErrorCategories(null);
-                    ImageCache.reset(); // Resetear caché al reintentar
-                    fetchCategories();
-                  }}
+                  key={product.key || `${product.id}-${index}`} 
+                  style={styles.productItem}
+                  onPress={() => handleProductPress(product)}
                 >
-                  <Text style={styles.retryButtonText}>Reintentar</Text>
-                </TouchableOpacity>
-              </View>
-            ) : categories.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No hay categorías disponibles</Text>
-              </View>
-            ) : (
-              <ScrollView 
-                ref={categoriesScrollRef}
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.categoriesContainer}
-                onScroll={handleCategoriesScroll}
-                scrollEventThrottle={16}
-              >
-                {infiniteCategories.map((category, index) => (
-                  <TouchableOpacity 
-                    key={category.key || `${category.id}-${index}`} 
-                    style={styles.categoryItem}
-                    onPress={() => handleCategoryPress(category.nombre_cat, category.id)}
-                  >
-                    <View style={styles.categoryImageWrapper}>
-                      <Image 
-                        source={getCategoryImage(category.nombre_cat)} 
-                        style={styles.categoryImage}
-                        resizeMode="cover"
-                      />
-                      <View style={styles.categoryOverlay} />
-                    </View>
-                    <Text style={styles.categoryName} numberOfLines={1}>
-                      {category.nombre_cat}
+                  <SafeImage 
+                    source={{ uri: normalizeImageUrl(product.imagen) }}
+                    style={styles.productImage}
+                    resizeMode="cover"
+                    onError={() => handleProductImageError(product.id)}
+                    imageKey={`product-${product.id}`}
+                  />
+                  <View style={styles.productInfo}>
+                    <Text style={styles.productName} numberOfLines={1}>
+                      {product.nombre}
                     </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-          </View>
-
-          {/* Sección de Productos */}
-          <View style={styles.sectionContainer}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Productos Destacados</Text>
-              <TouchableOpacity onPress={() => router.push({
-                pathname: '/(tabs)/tienda',
-                params: { timestamp: Date.now() } // Añadir timestamp para forzar reset
-              })}>
-                <Text style={styles.seeAll}>Ver todo</Text>
-              </TouchableOpacity>
-            </View>
-            {loadingProducts ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#0000ff" />
-              </View>
-            ) : errorProducts ? (
-              <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>{errorProducts}</Text>
-                <TouchableOpacity 
-                  style={styles.retryButton}
-                  onPress={() => {
-                    setLoadingProducts(true);
-                    setErrorProducts(null);
-                    ImageCache.reset(); // Resetear caché al reintentar
-                    fetchProducts();
-                  }}
-                >
-                  <Text style={styles.retryButtonText}>Reintentar</Text>
+                    <Text style={styles.productPrice}>
+                      {formatPrice(product.precio)}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
-              </View>
-            ) : products.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No hay productos disponibles</Text>
-              </View>
-            ) : (
-              <ScrollView 
-                ref={productsScrollRef}
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.productsContainer}
-                onScroll={handleProductsScroll}
-                scrollEventThrottle={16}
-              >
-                {infiniteProducts.map((product, index) => (
-                  <TouchableOpacity 
-                    key={product.key || `${product.id}-${index}`} 
-                    style={styles.productItem}
-                    onPress={() => handleProductPress(product)}
-                  >
-                    <SafeImage 
-                      source={{ uri: normalizeImageUrl(product.imagen) }}
-                      style={styles.productImage}
-                      resizeMode="cover"
-                      onError={() => handleProductImageError(product.id)}
-                      imageKey={`product-${product.id}`}
-                    />
-                    <View style={styles.productInfo}>
-                      <Text style={styles.productName} numberOfLines={1}>
-                        {product.nombre}
-                      </Text>
-                      <Text style={styles.productPrice}>
-                        {formatPrice(product.precio)}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        </ScrollView>
-      </LinearGradient>
-    </View>
-  );
-};
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      </ScrollView>
+    </LinearGradient>
+  </SafeAreaView>
+);
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -1213,6 +1217,10 @@ const styles = StyleSheet.create({
   },
   gradientBackground: {
     flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#fff',
   },
   fixedHeader: {
     position: 'absolute',

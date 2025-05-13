@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, TextInput, Alert } from 'react-native';
 import { useCart } from '../hooks/useCart';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -24,6 +24,18 @@ export default function CarritoScreen() {
       const price = parseFloat(item.precio);
       return total + (isNaN(price) ? 0 : price * item.cantidad);
     }, 0);
+  };
+  
+  // Función para aumentar la cantidad con límite de 5
+  const handleIncreaseQuantity = (item: { id: number; cantidad: number }) => {
+    if (item.cantidad >= 5) {
+      Alert.alert(
+        "Cantidad máxima",
+        "Solo puedes añadir hasta 5 unidades de un mismo producto"
+      );
+      return;
+    }
+    updateQuantity(Number(item.id), item.cantidad + 1);
   };
 
   return (
@@ -53,17 +65,25 @@ export default function CarritoScreen() {
                     )}
                     <View style={styles.quantityContainer}>
                       <TouchableOpacity
-                        onPress={() => updateQuantity(item.id, item.cantidad - 1)}
+                        onPress={() => updateQuantity(Number(item.id), item.cantidad - 1)}
                         style={styles.quantityButton}
                       >
                         <Ionicons name="remove" size={20} color="#000" />
                       </TouchableOpacity>
                       <Text style={styles.quantity}>{item.cantidad}</Text>
                       <TouchableOpacity
-                        onPress={() => updateQuantity(item.id, item.cantidad + 1)}
-                        style={styles.quantityButton}
+                        onPress={() => handleIncreaseQuantity(item)}
+                        style={[
+                          styles.quantityButton, 
+                          item.cantidad >= 5 ? {opacity: 0.5} : {}
+                        ]}
+                        disabled={item.cantidad >= 5}
                       >
-                        <Ionicons name="add" size={20} color="#000" />
+                        <Ionicons 
+                          name="add" 
+                          size={20} 
+                          color={item.cantidad >= 5 ? "#999" : "#000"} 
+                        />
                       </TouchableOpacity>
                     </View>
                   </View>

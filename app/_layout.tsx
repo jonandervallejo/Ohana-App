@@ -31,9 +31,15 @@ export default function RootLayout() {
   return (
     <CartProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack screenOptions={{ headerShown: true }}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="+not-found" />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen 
+            name="(tabs)" 
+            options={{ 
+              headerShown: false,
+              title: "" // Esto elimina el título "(tabs)"
+            }} 
+          />
+          <Stack.Screen name="+not-found" options={{ headerShown: false }} />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>

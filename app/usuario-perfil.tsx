@@ -9,14 +9,15 @@ import {
   Alert,
   ActivityIndicator,
   Dimensions,
-  Animated
+  Animated,
+  Platform,
+  StatusBar
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, Stack } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Header from '../components/Header';
 
 const { width } = Dimensions.get('window');
 
@@ -85,14 +86,10 @@ const UserProfileScreen = () => {
           onPress: async () => {
             try {
               setLogoutLoading(true);
-              
-              // Limpiar todos los datos de sesión
               await AsyncStorage.clear();
               
-              // Forzar la redirección a la pantalla de inicio de sesión
               setTimeout(() => {
                 setLogoutLoading(false);
-                // Forzar la navegación al formulario de inicio de sesión
                 router.push('/perfil');
               }, 500);
             } catch (error) {
@@ -125,7 +122,8 @@ const UserProfileScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <Stack.Screen
         options={{
           headerShown: false,
@@ -133,15 +131,25 @@ const UserProfileScreen = () => {
       />
       
       <LinearGradient
-        colors={['#f0f7ff', '#ffffff']}
+        colors={['#f8f8f8', '#ffffff']}
         style={styles.gradientBackground}
       >
-        <Header showSearch={false} userName={userData?.nombre || 'Usuario'} />
+        {/* Header minimalista */}
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.push('/(tabs)')}
+          >
+            <Ionicons name="chevron-back" size={24} color="#000" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Mi Perfil</Text>
+          <View style={{width: 40}} />
+        </View>
         
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={styles.loadingText}>Cargando tu perfil...</Text>
+            <ActivityIndicator size="large" color="#000" />
+            <Text style={styles.loadingText}>Cargando perfil...</Text>
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
@@ -158,6 +166,7 @@ const UserProfileScreen = () => {
           <ScrollView 
             style={styles.scrollView}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
           >
             <Animated.View 
               style={[
@@ -169,7 +178,7 @@ const UserProfileScreen = () => {
               <View style={styles.profileHeader}>
                 <View style={styles.avatarContainer}>
                   <View style={styles.avatar}>
-                    <FontAwesome5 name="user" size={40} color="#007AFF" />
+                    <FontAwesome5 name="user" size={40} color="#000" />
                   </View>
                   <View style={styles.activeIndicator} />
                 </View>
@@ -186,7 +195,7 @@ const UserProfileScreen = () => {
                 <View style={styles.infoCard}>
                   <View style={styles.infoItem}>
                     <View style={styles.infoIconContainer}>
-                      <FontAwesome5 name="envelope" size={16} color="#007AFF" />
+                      <FontAwesome5 name="envelope" size={16} color="#000" />
                     </View>
                     <View style={styles.infoContent}>
                       <Text style={styles.infoLabel}>Correo electrónico</Text>
@@ -198,7 +207,7 @@ const UserProfileScreen = () => {
                   
                   <View style={styles.infoItem}>
                     <View style={styles.infoIconContainer}>
-                      <FontAwesome5 name="phone" size={16} color="#007AFF" />
+                      <FontAwesome5 name="phone" size={16} color="#000" />
                     </View>
                     <View style={styles.infoContent}>
                       <Text style={styles.infoLabel}>Teléfono</Text>
@@ -210,7 +219,7 @@ const UserProfileScreen = () => {
                   
                   <View style={styles.infoItem}>
                     <View style={styles.infoIconContainer}>
-                      <FontAwesome5 name="map-marker-alt" size={16} color="#007AFF" />
+                      <FontAwesome5 name="map-marker-alt" size={16} color="#000" />
                     </View>
                     <View style={styles.infoContent}>
                       <Text style={styles.infoLabel}>Dirección</Text>
@@ -222,7 +231,7 @@ const UserProfileScreen = () => {
                   
                   <View style={styles.infoItem}>
                     <View style={styles.infoIconContainer}>
-                      <FontAwesome5 name="calendar" size={16} color="#007AFF" />
+                      <FontAwesome5 name="calendar" size={16} color="#000" />
                     </View>
                     <View style={styles.infoContent}>
                       <Text style={styles.infoLabel}>Miembro desde</Text>
@@ -234,20 +243,16 @@ const UserProfileScreen = () => {
               
               {/* Acciones de usuario */}
               <View style={styles.actionsContainer}>
-                <TouchableOpacity 
-                  style={styles.actionButton}
-                  onPress={() => router.push('/favoritos')}
-                >
-                  <FontAwesome5 name="shopping-bag" size={20} color="#333" solid />
-                  <Text style={styles.actionButtonText}>Mis Pedidos</Text>
-                  <FontAwesome5 name="chevron-right" size={16} color="#999" />
-                </TouchableOpacity>
+                <Text style={styles.sectionTitle}>Mi Cuenta</Text>
                 
                 <TouchableOpacity 
                   style={styles.actionButton}
                   onPress={() => router.push('/favoritos')}
+                  activeOpacity={0.7}
                 >
-                  <FontAwesome5 name="heart" size={20} color="#333" solid />
+                  <View style={styles.actionIconContainer}>
+                    <FontAwesome5 name="heart" size={20} color="#000" />
+                  </View>
                   <Text style={styles.actionButtonText}>Favoritos</Text>
                   <FontAwesome5 name="chevron-right" size={16} color="#999" />
                 </TouchableOpacity>
@@ -255,9 +260,24 @@ const UserProfileScreen = () => {
                 <TouchableOpacity 
                   style={styles.actionButton}
                   onPress={() => router.push('/editar-perfil')}
+                  activeOpacity={0.7}
                 >
-                  <FontAwesome5 name="user-edit" size={20} color="#333" />
+                  <View style={styles.actionIconContainer}>
+                    <FontAwesome5 name="user-edit" size={20} color="#000" />
+                  </View>
                   <Text style={styles.actionButtonText}>Editar Perfil</Text>
+                  <FontAwesome5 name="chevron-right" size={16} color="#999" />
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.actionButton}
+                  onPress={() => router.push('/favoritos')}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.actionIconContainer}>
+                    <FontAwesome5 name="shopping-bag" size={20} color="#000" />
+                  </View>
+                  <Text style={styles.actionButtonText}>Historial de Pedidos</Text>
                   <FontAwesome5 name="chevron-right" size={16} color="#999" />
                 </TouchableOpacity>
               </View>
@@ -268,6 +288,7 @@ const UserProfileScreen = () => {
                   style={styles.logoutButton}
                   onPress={handleLogout}
                   disabled={logoutLoading}
+                  activeOpacity={0.8}
                 >
                   {logoutLoading ? (
                     <ActivityIndicator size="small" color="#fff" />
@@ -300,8 +321,32 @@ const styles = StyleSheet.create({
   gradientBackground: {
     flex: 1,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    height: 56,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    backgroundColor: '#fff',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+    textAlign: 'center',
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+  },
   scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 30,
   },
   profileContent: {
     padding: 20,
@@ -318,19 +363,25 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#e6f2ff',
+    backgroundColor: '#f5f5f5',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#cce5ff',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#eee',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   activeIndicator: {
     position: 'absolute',
@@ -346,13 +397,17 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#000',
     marginBottom: 5,
   },
   userRole: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#666',
-    marginBottom: 10,
+    backgroundColor: '#f5f5f5',
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   infoContainer: {
     marginBottom: 30,
@@ -361,33 +416,41 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 15,
-    color: '#333',
+    color: '#000',
     paddingHorizontal: 5,
   },
   infoCard: {
     backgroundColor: 'white',
-    borderRadius: 15,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+        borderWidth: 1,
+        borderColor: '#eee',
+      },
+    }),
     padding: 5,
   },
   infoItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 15,
-    paddingHorizontal: 10,
+    paddingHorizontal: 15,
   },
   infoIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f0f7ff',
+    backgroundColor: '#f5f5f5',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
@@ -402,12 +465,12 @@ const styles = StyleSheet.create({
   },
   infoValue: {
     fontSize: 16,
-    color: '#333',
+    color: '#000',
     fontWeight: '500',
   },
   separator: {
     height: 1,
-    backgroundColor: '#eee',
+    backgroundColor: '#f0f0f0',
     marginVertical: 4,
     marginLeft: 65,
   },
@@ -419,22 +482,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'white',
     padding: 15,
-    borderRadius: 15,
+    borderRadius: 12,
     marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 1,
+        },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+        borderWidth: 1,
+        borderColor: '#eee',
+      },
+    }),
+  },
+  actionIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
   },
   actionButtonText: {
     flex: 1,
-    marginLeft: 20,
     fontSize: 16,
-    color: '#333',
+    color: '#000',
     fontWeight: '500',
   },
   logoutContainer: {
@@ -446,15 +525,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#ff3b30',
     padding: 15,
-    borderRadius: 15,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   logoutButtonText: {
     marginLeft: 10,
@@ -466,7 +551,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingBottom: 50,
   },
   loadingText: {
     marginTop: 20,
@@ -478,7 +562,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 30,
-    paddingBottom: 50,
   },
   errorText: {
     marginTop: 20,
@@ -488,7 +571,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   loginButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#000',
     paddingVertical: 12,
     paddingHorizontal: 30,
     borderRadius: 25,
@@ -500,7 +583,7 @@ const styles = StyleSheet.create({
   },
   versionContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginTop: 10,
   },
   versionText: {
     color: '#999',

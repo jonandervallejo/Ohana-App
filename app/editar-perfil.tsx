@@ -8,13 +8,13 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   TextInput,
   Animated,
-  Dimensions
+  Dimensions,
+  StatusBar
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, Stack } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,8 +28,20 @@ const API_BASE_URL = 'http://ohanatienda.ddns.net:8000';
 // Obtener el ancho de la pantalla para el toast
 const { width } = Dimensions.get('window');
 
-// Componente Toast simple
-const Toast: React.FC<{ visible: boolean; message: string; type?: 'success' | 'error' }> = ({ visible, message, type = 'success' }) => {
+// Interfaz para los Toasts personalizados
+interface ToastMessage {
+  message: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  icon?: string;
+}
+
+// Componente Toast mejorado
+const Toast: React.FC<{ visible: boolean; message: string; type?: 'success' | 'error' | 'warning' | 'info'; icon?: string }> = ({ 
+  visible, 
+  message, 
+  type = 'success',
+  icon
+}) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   
   useEffect(() => {
@@ -50,20 +62,57 @@ const Toast: React.FC<{ visible: boolean; message: string; type?: 'success' | 'e
 
   if (!visible) return null;
 
+  // Determinar colores según tipo
+  let accentColor: string;
+  let iconName: React.ComponentProps<typeof Ionicons>['name'];
+  let backgroundColor = '#FFFFFF';
+  let iconBackgroundColor = '';
+
+  switch(type) {
+    case 'success':
+      accentColor = '#4CAF50';
+      iconName = (icon as React.ComponentProps<typeof Ionicons>['name']) || 'checkmark-circle';
+      iconBackgroundColor = 'rgba(76, 175, 80, 0.15)';
+      break;
+    case 'error':
+      accentColor = '#FF3B30';
+      iconName = (icon as React.ComponentProps<typeof Ionicons>['name']) || 'close-circle';
+      iconBackgroundColor = 'rgba(255, 59, 48, 0.15)';
+      break;
+    case 'warning':
+      accentColor = '#FF9500';
+      iconName = (icon as React.ComponentProps<typeof Ionicons>['name']) || 'warning';
+      iconBackgroundColor = 'rgba(255, 149, 0, 0.15)';
+      break;
+    case 'info':
+    default:
+      accentColor = '#007AFF';
+      iconName = (icon as React.ComponentProps<typeof Ionicons>['name']) || 'information-circle';
+      iconBackgroundColor = 'rgba(0, 122, 255, 0.15)';
+      break;
+  }
+
   return (
     <Animated.View 
       style={[
         styles.toast,
-        { opacity: fadeAnim },
-        type === 'error' ? { backgroundColor: '#d32f2f' } : { backgroundColor: '#4CAF50' }
+        { 
+          opacity: fadeAnim,
+        }
       ]}
     >
-      <Text style={styles.toastText}>{message}</Text>
+      <View style={[styles.toastAccent, { backgroundColor: accentColor }]} />
+      <View style={styles.toastContent}>
+        <View style={[styles.toastIconContainer, { backgroundColor: iconBackgroundColor }]}>
+          <Ionicons name={iconName} size={20} color={accentColor} />
+        </View>
+        <Text style={styles.toastText}>{message}</Text>
+      </View>
     </Animated.View>
   );
 };
 
-// Esquema de validación extendido con campos de contraseña
+// Esquema de validación modificado
 const ProfileSchema = Yup.object().shape({
   nombre: Yup.string()
     .min(2, 'El nombre debe tener al menos 2 caracteres')
@@ -77,18 +126,15 @@ const ProfileSchema = Yup.object().shape({
     .email('Correo electrónico inválido')
     .required('El correo electrónico es requerido'),
   currentPassword: Yup.string()
-    .when('newPassword', (newPassword, schema) => 
-      newPassword && newPassword.length > 0 
-        ? schema.required('La contraseña actual es requerida para cambiar a una nueva') 
-        : schema
-    ),
+    .required('Necesitas ingresar tu contraseña actual para confirmar los cambios'),
   newPassword: Yup.string()
-    .min(6, 'La contraseña debe tener al menos 6 caracteres')
-    .test('is-different', 'La nueva contraseña debe ser diferente a la actual', function(value) {
-      return !value || value !== this.parent.currentPassword;
+    .test('min-length', 'La contraseña debe tener al menos 6 caracteres', function(value) {
+      // Solo validar longitud si hay valor
+      return !value || value.length === 0 || value.length >= 6;
     }),
   confirmPassword: Yup.string()
     .test('passwords-match', 'Las contraseñas deben coincidir', function(value) {
+      // Solo verificar coincidencia si hay una nueva contraseña
       return !this.parent.newPassword || value === this.parent.newPassword;
     })
 });
@@ -106,7 +152,7 @@ interface UserData {
 }
 
 interface ProfileFormValues extends UserData {
-  currentPassword?: string;
+  currentPassword: string;
   newPassword?: string;
   confirmPassword?: string;
 }
@@ -117,9 +163,12 @@ const EditProfileScreen = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Estados para el toast mejorado
+  const [toast, setToast] = useState<ToastMessage | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+  const toastTimeout = useRef<NodeJS.Timeout | number | null>(null);
+  
   const [showPasswordSection, setShowPasswordSection] = useState(false);
   
   // Estados para mostrar/ocultar contraseñas
@@ -138,16 +187,21 @@ const EditProfileScreen = () => {
     }).start();
   }, [showPasswordSection]);
 
-  // Función para mostrar el toast
-  const showToast = (message: string, type: 'success' | 'error' = 'success', duration = 2000) => {
-    setToastMessage(message);
-    setToastType(type);
+  // Función para mostrar el toast mejorado
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success', icon?: string) => {
+    // Limpiar cualquier timeout existente
+    if (toastTimeout.current) {
+      clearTimeout(toastTimeout.current);
+    }
+    
+    // Establecer el nuevo mensaje
+    setToast({ message, type, icon });
     setToastVisible(true);
     
-    // Ocultar el toast después de la duración especificada
-    setTimeout(() => {
+    // Configurar el timeout para ocultar el toast
+    toastTimeout.current = setTimeout(() => {
       setToastVisible(false);
-    }, duration);
+    }, 2500);
   };
 
   useEffect(() => {
@@ -174,6 +228,13 @@ const EditProfileScreen = () => {
     };
 
     getUserData();
+    
+    // Limpiar timeout al desmontar
+    return () => {
+      if (toastTimeout.current) {
+        clearTimeout(toastTimeout.current);
+      }
+    };
   }, []);
 
   const handleSubmit = async (values: ProfileFormValues) => {
@@ -182,7 +243,7 @@ const EditProfileScreen = () => {
       const token = await AsyncStorage.getItem('userToken');
       
       if (!token) {
-        Alert.alert('Error', 'Sesión expirada. Por favor, inicia sesión de nuevo.');
+        showToast('Sesión expirada. Por favor, inicia sesión de nuevo.', 'error', 'alert-circle');
         router.replace('/perfil');
         return;
       }
@@ -198,17 +259,24 @@ const EditProfileScreen = () => {
         apellido2: userData.apellido2 || '',
         email: values.email,
         telefono: values.telefono || null,
-        direccion: values.direccion || null
+        direccion: values.direccion || null,
+        current_password: values.currentPassword // Siempre incluir contraseña actual
       };
       
-      // Agregar datos de contraseña si se está cambiando
-      if (values.currentPassword && values.newPassword && values.confirmPassword) {
-        updateData.current_password = values.currentPassword;
+      // Verificar si se está cambiando la contraseña
+      const isChangingPassword = 
+        values.newPassword && 
+        values.newPassword.trim() !== '' && 
+        values.confirmPassword && 
+        values.confirmPassword === values.newPassword;
+      
+      // Agregar nueva contraseña si se está cambiando
+      if (isChangingPassword) {
         updateData.password = values.newPassword;
         updateData.password_confirmation = values.confirmPassword;
       }
   
-      // Usar el endpoint específico para apps móviles
+      // Usar el endpoint para actualizar perfil
       const response = await axios.post(
         `${API_BASE_URL}/api/tienda/update-perfil`,
         updateData,
@@ -222,7 +290,7 @@ const EditProfileScreen = () => {
   
       console.log('Respuesta actualización:', response.data);
       
-      // Actualizar datos en AsyncStorage (solo los datos de perfil, no la contraseña)
+      // Actualizar datos en AsyncStorage
       const updatedUserData = {
         ...userData, 
         nombre: values.nombre,
@@ -235,10 +303,12 @@ const EditProfileScreen = () => {
       
       // Mostrar toast de éxito
       setSubmitting(false);
-      showToast(values.newPassword 
-        ? '¡Perfil y contraseña actualizados con éxito!' 
-        : '¡Perfil actualizado con éxito!', 
-        'success'
+      showToast(
+        isChangingPassword 
+          ? '¡Perfil y contraseña actualizados con éxito!' 
+          : '¡Perfil actualizado con éxito!', 
+        'success',
+        'checkmark-circle'
       );
       
       // Redirigir después de mostrar el toast
@@ -267,21 +337,22 @@ const EditProfileScreen = () => {
           }
         } else if (error.response.status === 401) {
           errorMessage = 'Tu sesión ha expirado. Por favor, inicia sesión de nuevo.';
-          await AsyncStorage.removeItem('userToken');
-          await AsyncStorage.removeItem('userData');
+          AsyncStorage.removeItem('userToken');
+          AsyncStorage.removeItem('userData');
           router.replace('/perfil');
         } else {
           errorMessage = `Error en el servidor: ${error.response.status}`;
         }
       }
       
-      showToast(errorMessage, 'error');
+      showToast(errorMessage, 'error', 'alert-circle');
       setSubmitting(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <Stack.Screen
         options={{
           headerShown: false,
@@ -289,7 +360,7 @@ const EditProfileScreen = () => {
       />
       
       <LinearGradient
-        colors={['#f0f7ff', '#ffffff']}
+        colors={['#f8f8f8', '#ffffff']}
         style={styles.gradientBackground}
       >
         {/* Header personalizado */}
@@ -298,15 +369,15 @@ const EditProfileScreen = () => {
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <Ionicons name="arrow-back" size={24} color="#333" />
+            <Ionicons name="chevron-back" size={24} color="#000" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Editar Perfil</Text>
-          <View style={styles.headerRight} />
+          <View style={{width: 40}} />
         </View>
         
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#007AFF" />
+            <ActivityIndicator size="large" color="#000" />
             <Text style={styles.loadingText}>Cargando tus datos...</Text>
           </View>
         ) : error ? (
@@ -334,7 +405,7 @@ const EditProfileScreen = () => {
                 <View style={styles.profileHeader}>
                   <View style={styles.avatarContainer}>
                     <View style={styles.avatar}>
-                      <FontAwesome5 name="user" size={40} color="#007AFF" />
+                      <FontAwesome5 name="user" size={40} color="#000" />
                     </View>
                   </View>
                   <Text style={styles.subtitle}>
@@ -355,7 +426,7 @@ const EditProfileScreen = () => {
                   validationSchema={ProfileSchema}
                   onSubmit={handleSubmit}
                 >
-                  {({ handleChange, handleBlur, handleSubmit, values, errors, touched }) => (
+                  {({ handleChange, handleBlur, handleSubmit, values, errors, touched, resetForm }) => (
                     <View>
                       <View style={styles.inputGroup}>
                         <Text style={styles.inputLabel}>Nombre</Text>
@@ -436,22 +507,65 @@ const EditProfileScreen = () => {
                         )}
                       </View>
                       
-                      {/* Sección de cambio de contraseña mejorada */}
+                      {/* Campo de contraseña actual (fuera de sección de seguridad) */}
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>Contraseña actual</Text>
+                        <Text style={styles.passwordInfo}>
+                          Necesaria para confirmar cualquier cambio en tu perfil
+                        </Text>
+                        <View style={styles.passwordInputContainer}>
+                          <TextInput
+                            style={[
+                              styles.passwordInput,
+                              touched.currentPassword && errors.currentPassword && styles.inputError
+                            ]}
+                            value={values.currentPassword}
+                            onChangeText={handleChange('currentPassword')}
+                            onBlur={handleBlur('currentPassword')}
+                            placeholder="Ingresa tu contraseña actual"
+                            secureTextEntry={!showCurrentPassword}
+                            editable={!submitting}
+                          />
+                          <TouchableOpacity 
+                            style={styles.eyeIcon}
+                            onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                          >
+                            <Ionicons 
+                              name={showCurrentPassword ? "eye-off" : "eye"} 
+                              size={22} 
+                              color="#666" 
+                            />
+                          </TouchableOpacity>
+                        </View>
+                        {touched.currentPassword && errors.currentPassword && (
+                          <Text style={styles.errorText}>{errors.currentPassword}</Text>
+                        )}
+                      </View>
+                      
+                      {/* Sección de cambio de contraseña (opcional) */}
                       <View style={styles.securitySection}>
                         <TouchableOpacity
                           style={styles.passwordToggleContainer}
-                          onPress={() => setShowPasswordSection(!showPasswordSection)}
+                          onPress={() => {
+                            // Si estamos cerrando la sección, limpiar los campos
+                            if (showPasswordSection) {
+                              handleChange('newPassword')('');
+                              handleChange('confirmPassword')('');
+                            }
+                            setShowPasswordSection(!showPasswordSection);
+                          }}
+                          activeOpacity={0.7}
                         >
                           <View style={styles.passwordToggleLeft}>
-                            <FontAwesome5 name="lock" size={18} color="#007AFF" style={styles.passwordIcon} />
+                            <FontAwesome5 name="lock" size={18} color="#000" style={styles.passwordIcon} />
                             <Text style={styles.passwordToggleText}>
-                              {showPasswordSection ? 'Ocultar opciones de seguridad' : 'Cambiar contraseña'}
+                              {showPasswordSection ? 'Cancelar cambio de contraseña' : 'Cambiar contraseña (opcional)'}
                             </Text>
                           </View>
                           <Ionicons 
                             name={showPasswordSection ? "chevron-up" : "chevron-down"} 
                             size={20} 
-                            color="#007AFF" 
+                            color="#000" 
                           />
                         </TouchableOpacity>
                         
@@ -462,52 +576,21 @@ const EditProfileScreen = () => {
                               {
                                 maxHeight: slideAnim.interpolate({
                                   inputRange: [0, 1],
-                                  outputRange: [0, 500]
+                                  outputRange: [0, 300]
                                 }),
                                 opacity: slideAnim
                               }
                             ]}
                           >
                             <View style={styles.passwordHeaderSection}>
-                              <FontAwesome5 name="shield-alt" size={16} color="#007AFF" />
-                              <Text style={styles.passwordSectionTitle}>Actualizar contraseña</Text>
+                              <FontAwesome5 name="shield-alt" size={16} color="#000" />
+                              <Text style={styles.passwordSectionTitle}>Nueva contraseña</Text>
                             </View>
                             
                             <Text style={styles.passwordInfo}>
-                              Para cambiar tu contraseña, ingresa tu contraseña actual y la nueva contraseña.
+                              Si deseas cambiar tu contraseña, rellena los siguientes campos.
                             </Text>
                             
-                            <View style={styles.inputGroup}>
-                              <Text style={styles.inputLabel}>Contraseña actual</Text>
-                              <View style={styles.passwordInputContainer}>
-                                <TextInput
-                                  style={[
-                                    styles.passwordInput,
-                                    touched.currentPassword && errors.currentPassword && styles.inputError
-                                  ]}
-                                  value={values.currentPassword}
-                                  onChangeText={handleChange('currentPassword')}
-                                  onBlur={handleBlur('currentPassword')}
-                                  placeholder="Ingresa tu contraseña actual"
-                                  secureTextEntry={!showCurrentPassword}
-                                  editable={!submitting}
-                                />
-                                <TouchableOpacity 
-                                  style={styles.eyeIcon}
-                                  onPress={() => setShowCurrentPassword(!showCurrentPassword)}
-                                >
-                                  <Ionicons 
-                                    name={showCurrentPassword ? "eye-off" : "eye"} 
-                                    size={22} 
-                                    color="#666" 
-                                  />
-                                </TouchableOpacity>
-                              </View>
-                              {touched.currentPassword && errors.currentPassword && (
-                                <Text style={styles.errorText}>{errors.currentPassword}</Text>
-                              )}
-                            </View>
-
                             <View style={styles.inputGroup}>
                               <Text style={styles.inputLabel}>Nueva contraseña</Text>
                               <View style={styles.passwordInputContainer}>
@@ -612,11 +695,12 @@ const EditProfileScreen = () => {
         )}
       </LinearGradient>
       
-      {/* Toast para mensajes de éxito */}
+      {/* Toast mejorado para mensajes */}
       <Toast 
         visible={toastVisible}
-        message={toastMessage}
-        type={toastType}
+        message={toast?.message || ''}
+        type={toast?.type || 'success'}
+        icon={toast?.icon}
       />
     </SafeAreaView>
   );
@@ -650,17 +734,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 15,
-    height: 60,
+    paddingVertical: 10,
+    height: 56,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    backgroundColor: '#fff',
   },
   backButton: {
     padding: 8,
+    borderRadius: 20,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+    textAlign: 'center',
   },
   headerRight: {
     width: 40,
@@ -689,19 +777,25 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#e6f2ff',
+    backgroundColor: '#f5f5f5',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#cce5ff',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#eee',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   inputGroup: {
     marginBottom: 20,
@@ -716,7 +810,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 15,
     paddingVertical: 12,
     fontSize: 16,
@@ -734,7 +828,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
   },
-  // Nuevos estilos mejorados para la sección de contraseña
+  // Estilos para la sección de contraseña
   securitySection: {
     marginTop: 10,
     marginBottom: 15,
@@ -743,13 +837,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#f0f7ff',
+    backgroundColor: '#f5f5f5',
     paddingHorizontal: 16,
     paddingVertical: 15,
-    borderRadius: 10,
+    borderRadius: 12,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#d0e4ff',
+    borderColor: '#eee',
   },
   passwordToggleLeft: {
     flexDirection: 'row',
@@ -761,24 +855,32 @@ const styles = StyleSheet.create({
   passwordToggleText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#007AFF',
+    color: '#000',
   },
   passwordSection: {
     backgroundColor: '#f9f9f9',
     padding: 15,
-    borderRadius: 10,
+    borderRadius: 12,
     borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
+    borderLeftColor: '#000',
     marginBottom: 20,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 2,
+        borderWidth: 1,
+        borderColor: '#eee',
+      },
+    }),
   },
   passwordHeaderSection: {
     flexDirection: 'row',
@@ -788,13 +890,13 @@ const styles = StyleSheet.create({
   passwordSectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: '#000',
     marginLeft: 8,
   },
   passwordInfo: {
     color: '#666',
     fontSize: 14,
-    marginBottom: 15,
+    marginBottom: 10,
     lineHeight: 20,
   },
   passwordInputContainer: {
@@ -803,7 +905,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 8,
+    borderRadius: 12,
   },
   passwordInput: {
     flex: 1,
@@ -827,26 +929,32 @@ const styles = StyleSheet.create({
     marginVertical: 20,
   },
   saveButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#000',
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: 12,
     flex: 1,
     marginLeft: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: {
+          width: 0,
+          height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   cancelButton: {
     backgroundColor: 'white',
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#ddd',
     flex: 1,
@@ -862,16 +970,15 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     color: '#333',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   buttonDisabled: {
-    backgroundColor: '#b3d1ff',
+    backgroundColor: '#999',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingBottom: 50,
   },
   loadingText: {
     marginTop: 20,
@@ -883,10 +990,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 30,
-    paddingBottom: 50,
   },
   loginButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#000',
     paddingVertical: 12,
     paddingHorizontal: 30,
     borderRadius: 25,
@@ -905,31 +1011,53 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 14,
   },
+  // Estilos para el toast mejorado
   toast: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 100 : 100,
-    alignSelf: 'center',
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 20,
+    top: Platform.OS === 'ios' ? 50 : 50,
+    left: 20,
+    right: 20,
+    zIndex: 9999,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: 'rgba(0,0,0,0.2)',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.5,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  toastAccent: {
+    width: 4,
+    height: '100%',
+  },
+  toastContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 12,
-    borderRadius: 25,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-    zIndex: 1000,
-    minWidth: 200,
-    maxWidth: width * 0.8,
+    paddingHorizontal: 14,
+  },
+  toastIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   toastText: {
-    color: 'white',
+    flex: 1,
     fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: '500',
+    color: '#333',
   },
 });
 

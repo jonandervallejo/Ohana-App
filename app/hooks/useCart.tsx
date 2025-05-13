@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from 'react-native';
 
 interface CartItem {
   id: number;
@@ -104,18 +105,39 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
 
+    // Asegurar que cantidad sea válida
+    if (!product.cantidad || product.cantidad < 1) {
+      product.cantidad = 1;
+    } else if (product.cantidad > 5) {
+      product.cantidad = 5;
+    }
+
     setCartItems(prevItems => {
-      const existingItem = prevItems.find(item => item.id === product.id);
+      // Buscar si el producto ya existe (comparando también la talla)
+      const existingItemIndex = prevItems.findIndex(
+        item => item.id === product.id && item.talla === product.talla
+      );
+      
       let newItems;
       
-      if (existingItem) {
-        newItems = prevItems.map(item =>
-          item.id === product.id
-            ? { ...item, cantidad: item.cantidad + 1 }
-            : item
-        );
+      if (existingItemIndex !== -1) {
+        // Si el producto ya existe, sumar la cantidad nueva a la existente
+        newItems = [...prevItems];
+        const newQuantity = newItems[existingItemIndex].cantidad + product.cantidad;
+        
+        // Limitar a un máximo de 5 unidades
+        if (newQuantity > 5) {
+          Alert.alert(
+            "Cantidad máxima",
+            "Solo puedes añadir hasta 5 unidades de un mismo producto"
+          );
+          newItems[existingItemIndex].cantidad = 5;
+        } else {
+          newItems[existingItemIndex].cantidad = newQuantity;
+        }
       } else {
-        newItems = [...prevItems, { ...product, cantidad: 1 }];
+        // Si no existe, añadirlo con la cantidad especificada
+        newItems = [...prevItems, { ...product }];
       }
       
       saveCart(newItems);
@@ -136,7 +158,21 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateQuantity = (productId: number, quantity: number) => {
-    if (!isLoggedIn || quantity < 1) return;
+    if (!isLoggedIn) return;
+    
+    // Si la cantidad es menor que 1, eliminar el producto
+    if (quantity < 1) {
+      return removeFromCart(productId);
+    }
+    
+    // Limitar a un máximo de 5 unidades
+    if (quantity > 5) {
+      Alert.alert(
+        "Cantidad máxima",
+        "Solo puedes añadir hasta 5 unidades de un mismo producto"
+      );
+      quantity = 5;
+    }
     
     setCartItems(prevItems => {
       const newItems = prevItems.map(item =>
@@ -182,4 +218,4 @@ export function useCart() {
     throw new Error('useCart must be used within a CartProvider');
   }
   return context;
-} 
+}
