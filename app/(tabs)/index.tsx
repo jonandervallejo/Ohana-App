@@ -1,33 +1,13 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  Image, 
-  Dimensions, 
-  TouchableOpacity, 
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  Alert,
-  TextInput,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
-  FlatList,
-  Keyboard,
-  ImageBackground,
-  Animated,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, Dimensions, TouchableOpacity, ActivityIndicator,
+Modal, Pressable, Alert, TextInput, NativeSyntheticEvent, NativeScrollEvent, FlatList, Keyboard, ImageBackground, Animated, Platform,} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { FontAwesome5 } from '@expo/vector-icons';
 import axios from 'axios';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack } from 'expo-router';
-
 
 interface ImageData {
   id: number;
@@ -64,21 +44,9 @@ interface SearchResult extends Product {
   imagen_url?: string;
 }
 
-type CategoryName = 'Accesorios' | 'Faldas' | 'Jerseys' | 'Camisetas' | 'Pantalones' | 'Vestidos' | 'Abrigos' | 'Zapatos';
-
-interface CategoryImages {
-  [key: string]: any;
-}
-
-type IconName = 'shopping-bag' | 'tshirt' | 'shoe-prints' | 'hoodie' | 'socks' | 'hat-cowboy';
-
-interface CategoryIcons {
-  [key: string]: IconName;
-}
-
 const { width } = Dimensions.get('window');
 
-// Importar todas las imágenes locales de una vez
+// ********************************ELIMINAR TODO LO QUE SE SAQUE DESDE LOCAL************************************
 const DEFAULT_IMAGE = require('@/assets/images/camiseta1.jpg');
 const CATEGORY_IMAGES = {
   bolso: require('@/assets/images/bolso.jpg'),
@@ -93,8 +61,8 @@ const CATEGORY_IMAGES = {
   chaqueta: require('@/assets/images/chaqueta.jpg')
 };
 
-// API base URL constante
-const API_BASE_URL = 'https://ohanatienda.ddns.net:8080';
+//dominio para llamadas a la API
+const API_BASE_URL = 'https://ohanatienda.ddns.net';
 
 // Sistema global de caché de imágenes mejorado
 const ImageCache = {
@@ -129,25 +97,15 @@ const normalizeImageUrl = (imageUrl: string): string => {
   
   try {
     imageUrl = imageUrl.trim();
-    
-    // Si la URL ya está en caché como fallida, no procesar
-    if (ImageCache.hasFailed(imageUrl)) return '';
-    
+ 
     // Si la URL ya incluye la base completa, úsala como está
     if (imageUrl.startsWith('https')) {
+      //console.log('entra al if***************')
       return imageUrl;
     }
+
+    return `${API_BASE_URL}${imageUrl}`; 
     
-    // Si la URL comienza con //, convertir a https:
-    if (imageUrl.startsWith('//')) {
-      return `https:${imageUrl}`;
-    }
-    
-    // Asegurarnos que la ruta comience con /
-    const path = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
-    
-    // Construir URL completa
-    return `${API_BASE_URL}${path}`; 
   } catch (error) {  
     console.error('Error normalizando URL:', error, 'URL original:', imageUrl);
     return '';

@@ -7,7 +7,6 @@ import {
   StyleSheet, 
   Animated,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -21,7 +20,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // URL base para la API
-const API_BASE_URL = 'http://ohanatienda.ddns.net:8080';
+const API_BASE_URL = 'https://ohanatienda.ddns.net';
 
 // Esquema de validación
 const RegisterSchema = Yup.object().shape({

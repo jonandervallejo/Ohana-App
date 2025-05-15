@@ -23,7 +23,7 @@ import * as Yup from 'yup';
 import axios from 'axios';
 
 // URL base para la API
-const API_BASE_URL = 'http://ohanatienda.ddns.net:8080';
+const API_BASE_URL = 'https://ohanatienda.ddns.net';
 
 // Obtener el ancho de la pantalla para el toast
 const { width } = Dimensions.get('window');

@@ -24,7 +24,7 @@ import { useCart } from './hooks/useCart'; // Importar el hook de carrito
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 45) / 2; // Dos columnas con padding
-const API_BASE_URL = 'http://ohanatienda.ddns.net:8080';
+const API_BASE_URL = 'https://ohanatienda.ddns.net';
 const DEFAULT_IMAGE = require('@/assets/images/camiseta1.jpg');
 
 // Interfaz para los Toasts personalizados

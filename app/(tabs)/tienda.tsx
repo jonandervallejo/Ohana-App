@@ -52,7 +52,7 @@ interface ToastMessage {
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 45) / 2;
-const API_BASE_URL = 'http://ohanatienda.ddns.net:8080';
+const API_BASE_URL = 'https://ohanatienda.ddns.net';
 
 export default function TiendaScreen() {
   const params = useLocalSearchParams();

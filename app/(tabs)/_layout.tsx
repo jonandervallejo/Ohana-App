@@ -191,7 +191,7 @@ export default function TabLayout() {
         }}
       />
 
-      <Tabs.Screen
+      {/*<Tabs.Screen
         name="registro"
         listeners={{
           tabPress: () => animateIcon('user')
@@ -214,7 +214,7 @@ export default function TabLayout() {
             </View>
           ),
         }}
-      />
+      />*/}
     </Tabs>
   );
 }
