@@ -54,7 +54,7 @@ export default function CarritoScreen() {
               {cartItems.map((item) => (
                 <View key={item.id} style={styles.item}>
                   <Image
-                    source={{ uri: `http://ohanatienda.ddns.net:8000/${item.imagen}` }}
+                    source={{ uri: `http://ohanatienda.ddns.net:8080/${item.imagen}` }}
                     style={styles.image}
                   />
                   <View style={styles.itemDetails}>

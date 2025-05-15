@@ -135,12 +135,12 @@ const ProductDetail = () => {
     
     try {
       // Busca tanto en productos de Hombre como de mujer
-      const response = await axios.get(`http://ohanatienda.ddns.net:8000/api/productos/buscar?q=${encodeURIComponent(query)}`);
+      const response = await axios.get(`http://ohanatienda.ddns.net:8080/api/productos/buscar?q=${encodeURIComponent(query)}`);
       
       if (response.data && Array.isArray(response.data)) {
         const formattedResults = response.data.map((product: any) => ({
           ...product,
-          imagen_url: `http://ohanatienda.ddns.net:8000/${product.imagen}`
+          imagen_url: `http://ohanatienda.ddns.net:8080/${product.imagen}`
         }));
         setSearchResults(formattedResults);
       } else {
@@ -269,7 +269,7 @@ const ProductDetail = () => {
     
     const fetchProductDetails = async () => {
       try {
-        const response = await axios.get(`http://ohanatienda.ddns.net:8000/api/productos/${id}`);
+        const response = await axios.get(`http://ohanatienda.ddns.net:8080/api/productos/${id}`);
         console.log("Respuesta del API:", JSON.stringify(response.data));
         setProduct(response.data);
       } catch (error) {
@@ -295,7 +295,7 @@ const ProductDetail = () => {
     if (!product) return [];
 
     // Imagen principal siempre al inicio
-    const mainImageUrl = `http://ohanatienda.ddns.net:8000/${product.imagen}`;
+    const mainImageUrl = `http://ohanatienda.ddns.net:8080/${product.imagen}`;
     const mainImage = { 
       id: 'main',
       url: mainImageUrl
@@ -310,21 +310,21 @@ const ProductDetail = () => {
         if (img && img.ruta) {
           return {
             id: img.id || `carousel-${img.orden || index}`,
-            url: `http://ohanatienda.ddns.net:8000/${img.ruta}`
+            url: `http://ohanatienda.ddns.net:8080/${img.ruta}`
           };
         } 
         // Si ya tiene el formato del frontend (con campo 'url')
         else if (img && img.url) {
           return {
             id: img.id || `carousel-${index}`,
-            url: img.url.startsWith('http') ? img.url : `http://ohanatienda.ddns.net:8000/${img.url}`
+            url: img.url.startsWith('http') ? img.url : `http://ohanatienda.ddns.net:8080/${img.url}`
           };
         }
         // Si es solo un string (url directa)
         else if (typeof img === 'string') {
           return {
             id: `img-${Math.random().toString(36).substr(2, 9)}`,
-            url: img.startsWith('http') ? img : `http://ohanatienda.ddns.net:8000/${img}`
+            url: img.startsWith('http') ? img : `http://ohanatienda.ddns.net:8080/${img}`
           };
         }
         return null;
@@ -674,7 +674,7 @@ const ProductDetail = () => {
                     activeOpacity={0.7}
                   >
                     <Image 
-                      source={{ uri: item.imagen_url || `http://ohanatienda.ddns.net:8000/${item.imagen}` }}
+                      source={{ uri: item.imagen_url || `http://ohanatienda.ddns.net:8080/${item.imagen}` }}
                       style={styles.searchResultImage}
                       resizeMode="cover"
                     />

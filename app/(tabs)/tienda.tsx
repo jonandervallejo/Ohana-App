@@ -52,7 +52,7 @@ interface ToastMessage {
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 45) / 2;
-const API_BASE_URL = 'http://ohanatienda.ddns.net:8000';
+const API_BASE_URL = 'http://ohanatienda.ddns.net:8080';
 
 export default function TiendaScreen() {
   const params = useLocalSearchParams();
@@ -89,11 +89,7 @@ export default function TiendaScreen() {
   
   // Estados para animación del spinner
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const rotateAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim1 = useRef(new Animated.Value(0)).current;
-  const scaleAnim2 = useRef(new Animated.Value(0)).current;
-  const scaleAnim3 = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const spinAnim = useRef(new Animated.Value(0)).current;
   
   // Usar el hook de favoritos
   const { favoritos, loading: loadingFavoritos, esFavorito, toggleFavorito } = useFavoritos();
@@ -103,117 +99,36 @@ export default function TiendaScreen() {
 
   const availableSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
-  // Animación del nuevo spinner
+  // Animación del spinner elegante y minimalista
   useEffect(() => {
     if (isLoadingAllProducts) {
       // Mostrar con fade in
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 400,
+        duration: 300,
         useNativeDriver: true,
-        easing: Easing.out(Easing.cubic)
+        easing: Easing.ease
       }).start();
       
       // Rotación infinita
       Animated.loop(
-        Animated.timing(rotateAnim, {
+        Animated.timing(spinAnim, {
           toValue: 1,
-          duration: 2000,
+          duration: 1200,
           easing: Easing.linear,
           useNativeDriver: true
         })
       ).start();
       
-      // Pulso del logo
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.2,
-            duration: 1000,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1000,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true
-          })
-        ])
-      ).start();
-      
-      // Animación secuencial de los círculos
-      const startCircleAnimations = () => {
-        Animated.stagger(200, [
-          // Primer círculo
-          Animated.sequence([
-            Animated.timing(scaleAnim1, {
-              toValue: 1,
-              duration: 600,
-              easing: Easing.out(Easing.back(1)),
-              useNativeDriver: true
-            }),
-            Animated.timing(scaleAnim1, {
-              toValue: 0.6,
-              duration: 600,
-              easing: Easing.in(Easing.cubic),
-              useNativeDriver: true
-            })
-          ]),
-          // Segundo círculo
-          Animated.sequence([
-            Animated.timing(scaleAnim2, {
-              toValue: 1,
-              duration: 600,
-              easing: Easing.out(Easing.back(1)),
-              useNativeDriver: true
-            }),
-            Animated.timing(scaleAnim2, {
-              toValue: 0.6,
-              duration: 600,
-              easing: Easing.in(Easing.cubic),
-              useNativeDriver: true
-            })
-          ]),
-          // Tercer círculo
-          Animated.sequence([
-            Animated.timing(scaleAnim3, {
-              toValue: 1,
-              duration: 600,
-              easing: Easing.out(Easing.back(1)),
-              useNativeDriver: true
-            }),
-            Animated.timing(scaleAnim3, {
-              toValue: 0.6,
-              duration: 600,
-              easing: Easing.in(Easing.cubic),
-              useNativeDriver: true
-            })
-          ])
-        ]).start(() => {
-          // Reiniciar la animación
-          startCircleAnimations();
-        });
-      };
-      
-      // Iniciar animaciones de los círculos
-      scaleAnim1.setValue(0.6);
-      scaleAnim2.setValue(0.6);
-      scaleAnim3.setValue(0.6);
-      startCircleAnimations();
     } else {
       // Ocultar con fade out
       Animated.timing(fadeAnim, {
         toValue: 0,
-        duration: 300,
+        duration: 200,
         useNativeDriver: true
       }).start(() => {
         // Reset valores
-        rotateAnim.setValue(0);
-        pulseAnim.setValue(1);
-        scaleAnim1.setValue(0.6);
-        scaleAnim2.setValue(0.6);
-        scaleAnim3.setValue(0.6);
+        spinAnim.setValue(0);
       });
     }
   }, [isLoadingAllProducts]);
@@ -723,12 +638,12 @@ export default function TiendaScreen() {
     );
   };
 
-  // Nuevo Spinner elegante
+  // Spinner elegante y minimalista
   const renderLoadingSpinner = () => {
     if (!isLoadingAllProducts) return null;
     
     // Crear animación de rotación
-    const rotate = rotateAnim.interpolate({
+    const rotate = spinAnim.interpolate({
       inputRange: [0, 1],
       outputRange: ['0deg', '360deg']
     });
@@ -741,53 +656,16 @@ export default function TiendaScreen() {
         ]}
       >
         <View style={styles.loaderContainer}>
-          {/* Anillo exterior rotatorio */}
           <Animated.View 
             style={[
-              styles.rotatingRing, 
+              styles.spinner, 
               { transform: [{ rotate }] }
             ]}
           />
-          
-          {/* Círculos pulsantes */}
-          <View style={styles.circlesContainer}>
-            <Animated.View 
-              style={[
-                styles.loadingCircle, 
-                styles.circle1,
-                { transform: [{ scale: scaleAnim1 }] }
-              ]} 
-            />
-            <Animated.View 
-              style={[
-                styles.loadingCircle, 
-                styles.circle2,
-                { transform: [{ scale: scaleAnim2 }] }
-              ]} 
-            />
-            <Animated.View 
-              style={[
-                styles.loadingCircle, 
-                styles.circle3,
-                { transform: [{ scale: scaleAnim3 }] }
-              ]} 
-            />
+          <View style={styles.spinnerIcon}>
+            <FontAwesome5 name="shopping-bag" size={22} color="#222" />
           </View>
-          
-          {/* Logo central */}
-          <Animated.View 
-            style={[
-              styles.logoContainer,
-              { transform: [{ scale: pulseAnim }] }
-            ]}
-          >
-            <FontAwesome5 name="shopping-bag" size={32} color="#fff" />
-          </Animated.View>
-          
-          {/* Texto */}
-          <View style={styles.loaderTextContainer}>
-            <Text style={styles.loaderText}>Cargando colección</Text>
-          </View>
+          <Text style={styles.loaderText}>Cargando productos</Text>
         </View>
       </Animated.View>
     );
@@ -1388,96 +1266,72 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 300,
   },
-  // Estilos para el nuevo spinner
+  // Estilos para el nuevo spinner elegante
   loadingOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(255,255,255,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1000,
   },
   loaderContainer: {
-    width: 220,
-    height: 220,
-    borderRadius: 20,
+    width: 160,
+    height: 160,
+    borderRadius: 16,
+    backgroundColor: 'white',
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
-  },
-  rotatingRing: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    borderWidth: 8,
-    borderColor: 'rgba(255,255,255,0.15)',
-    borderTopColor: '#fff',
-    borderLeftColor: 'rgba(255,255,255,0.8)',
-    position: 'absolute',
-  },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#121212',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'absolute',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
         shadowRadius: 10,
       },
       android: {
-        elevation: 8,
+        elevation: 10,
       },
     }),
   },
-  circlesContainer: {
+  spinner: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    borderWidth: 3,
+    borderColor: '#f0f0f0',
+    borderTopColor: '#CAAB8F', // Color dorado elegante, como la identidad de marca
     position: 'absolute',
-    width: 150,
-    height: 150,
+  },
+  spinnerIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#f9f9f9',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  loadingCircle: {
-    position: 'absolute',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-  },
-  circle1: {
-    backgroundColor: '#ff3366',
-    top: 30,
-  },
-  circle2: {
-    backgroundColor: '#50E3C2',
-    bottom: 30,
-    left: 40,
-  }, 
-  circle3: {
-    backgroundColor: '#FFCC33',
-    bottom: 30,
-    right: 40,
-  },
-  loaderTextContainer: {
-    position: 'absolute',
-    bottom: 30,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    borderRadius: 30,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.15,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 3,
+      }
+    }),
   },
   loaderText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+    position: 'absolute',
+    bottom: 25,
+    color: '#555',
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: 0.3,
   },
   // Estilos para el toast personalizado
   toast: {

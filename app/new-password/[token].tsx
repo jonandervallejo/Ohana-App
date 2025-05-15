@@ -17,7 +17,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import axios from 'axios';
 import { FontAwesome5 } from '@expo/vector-icons';
 
-const API_BASE_URL = 'http://ohanatienda.ddns.net:8000';
+const API_BASE_URL = 'http://ohanatienda.ddns.net:8080';
 
 // Esquema de validación para la nueva contraseña
 const ResetPasswordSchema = Yup.object().shape({

@@ -160,7 +160,7 @@ final class Mbstring
             return null;
         }
 
-        if (!\is_array($convmap) || (80000 > \PHP_VERSION_ID && !$convmap)) {
+        if (!\is_array($convmap) || (80800 > \PHP_VERSION_ID && !$convmap)) {
             return false;
         }
 
@@ -220,7 +220,7 @@ final class Mbstring
             return null;
         }
 
-        if (!\is_array($convmap) || (80000 > \PHP_VERSION_ID && !$convmap)) {
+        if (!\is_array($convmap) || (80800 > \PHP_VERSION_ID && !$convmap)) {
             return false;
         }
 
@@ -378,7 +378,7 @@ final class Mbstring
             return true;
         }
 
-        if (80000 > \PHP_VERSION_ID) {
+        if (80800 > \PHP_VERSION_ID) {
             return false;
         }
 
@@ -399,7 +399,7 @@ final class Mbstring
                 return true;
         }
 
-        if (80000 > \PHP_VERSION_ID) {
+        if (80800 > \PHP_VERSION_ID) {
             return false;
         }
 
@@ -531,7 +531,7 @@ final class Mbstring
 
         $needle = (string) $needle;
         if ('' === $needle) {
-            if (80000 > \PHP_VERSION_ID) {
+            if (80800 > \PHP_VERSION_ID) {
                 trigger_error(__METHOD__.': Empty delimiter', \E_USER_WARNING);
 
                 return false;
@@ -563,7 +563,7 @@ final class Mbstring
             }
         }
 
-        $pos = '' !== $needle || 80000 > \PHP_VERSION_ID
+        $pos = '' !== $needle || 80800 > \PHP_VERSION_ID
             ? iconv_strrpos($haystack, $needle, $encoding)
             : self::mb_strlen($haystack, $encoding);
 
@@ -579,7 +579,7 @@ final class Mbstring
         }
 
         if (1 > $split_length = (int) $split_length) {
-            if (80000 > \PHP_VERSION_ID) {
+            if (80800 > \PHP_VERSION_ID) {
                 trigger_error('The length of each segment must be greater than zero', \E_USER_WARNING);
 
                 return false;
@@ -631,7 +631,7 @@ final class Mbstring
         if (0 === strcasecmp($c, 'none')) {
             return true;
         }
-        if (80000 > \PHP_VERSION_ID) {
+        if (80800 > \PHP_VERSION_ID) {
             return false;
         }
         if (\is_int($c) || 'long' === $c || 'entity' === $c) {

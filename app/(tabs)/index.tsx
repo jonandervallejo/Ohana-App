@@ -94,7 +94,7 @@ const CATEGORY_IMAGES = {
 };
 
 // API base URL constante
-const API_BASE_URL = 'http://ohanatienda.ddns.net:8000';
+const API_BASE_URL = 'https://ohanatienda.ddns.net:8080';
 
 // Sistema global de caché de imágenes mejorado
 const ImageCache = {
@@ -134,7 +134,7 @@ const normalizeImageUrl = (imageUrl: string): string => {
     if (ImageCache.hasFailed(imageUrl)) return '';
     
     // Si la URL ya incluye la base completa, úsala como está
-    if (imageUrl.startsWith('http')) {
+    if (imageUrl.startsWith('https')) {
       return imageUrl;
     }
     

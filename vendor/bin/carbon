@@ -15,7 +15,7 @@ namespace Composer;
 $GLOBALS['_composer_bin_dir'] = __DIR__;
 $GLOBALS['_composer_autoload_path'] = __DIR__ . '/..'.'/autoload.php';
 
-if (PHP_VERSION_ID < 80000) {
+if (PHP_VERSION_ID < 80800) {
     if (!class_exists('Composer\BinProxyWrapper')) {
         /**
          * @internal

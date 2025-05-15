@@ -1,21 +1,14 @@
 import { Tabs } from 'expo-router';
-import React, { useEffect, useRef } from 'react';
+import React, { useRef } from 'react';
 import { Platform, View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-
 import { HapticTab } from '@/components/HapticTab';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { useCart } from '@/app/hooks/useCart';
 
-const { width } = Dimensions.get('window');
-const TAB_WIDTH = width / 5;
-
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
   const { cartItems } = useCart();
   
-  // Para animación de escala de íconos
+  //para animacion de escala de íconos
   const scaleAnims = {
     home: useRef(new Animated.Value(1)).current,
     shop: useRef(new Animated.Value(1)).current,
@@ -24,20 +17,14 @@ export default function TabLayout() {
     user: useRef(new Animated.Value(1)).current
   };
   
-  // Calcular el número total de productos en el carrito
   const cartItemCount = cartItems.reduce((total, item) => total + item.cantidad, 0);
   
-  // Paleta de colores elegantes y modernos
-  const primaryColor = '#101010';     // Texto e iconos activos (negro profundo)
-  const secondaryColor = '#9E9E9E';   // Iconos inactivos (gris medio)
-  const accentColor = '#CAAB8F';      // Color acento (dorado champagne)
-  const surfaceColor = '#FFFFFF';     // Fondo blanco puro
-  const activeBackground = '#FAF7F4'; // Beige muy sutil para selección
-  const badgeColor = '#E06C75';       // Rojo suave para badge
+  const primaryColor = '#101010';    
+  const secondaryColor = '#9E9E9E';  
+  const surfaceColor = '#FFFFFF';    
   
-  // Función para animar el ícono activo con efecto de rebote elegante
+  //funcion para animar el icono activo en la barra inferior
   const animateIcon = (iconKey: keyof typeof scaleAnims) => {
-    // Primero reseteamos todos los iconos
     Object.keys(scaleAnims).forEach(key => {
       Animated.spring(scaleAnims[key as keyof typeof scaleAnims], {
         toValue: 1,
@@ -46,7 +33,7 @@ export default function TabLayout() {
       }).start();
     });
     
-    // Luego animamos el icono seleccionado con un rebote elegante
+    //se anima el icono con rebote elegante
     Animated.sequence([
       Animated.timing(scaleAnims[iconKey], {
         toValue: 0.8,
@@ -54,9 +41,9 @@ export default function TabLayout() {
         useNativeDriver: true
       }),
       Animated.spring(scaleAnims[iconKey], {
-        toValue: 1.1,  // Más sutil, solo crece un 10%
-        friction: 7,   // Mayor fricción para movimiento más sofisticado
-        tension: 70,   // Tensión ajustada para animación más elegante
+        toValue: 1.1,  // crece un 10%
+        friction: 7,
+        tension: 70,
         useNativeDriver: true
       }),
     ]).start();
@@ -92,7 +79,7 @@ export default function TabLayout() {
           fontSize: 11,
           fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
           fontWeight: '500',
-          marginTop: 8, // Aumentado el margen para evitar cualquier superposición
+          marginTop: 8,
           letterSpacing: 0.2,
         },
       }}
@@ -241,7 +228,7 @@ const styles = StyleSheet.create({
     height: 48,
   },
   iconBackground: {
-    width: 42,  // Ligeramente más grande para mayor presencia
+    width: 42, 
     height: 42,
     borderRadius: 21,
     justifyContent: 'center',
@@ -251,7 +238,7 @@ const styles = StyleSheet.create({
   iconFocused: {
     backgroundColor: '#FAF7F4',
     borderWidth: 1,
-    borderColor: '#CAAB8F20', // Borde muy sutil con transparencia
+    borderColor: '#CAAB8F20',
     ...Platform.select({
       ios: {
         shadowColor: '#CAAB8F',
