@@ -53,6 +53,59 @@ interface ToastMessage {
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 45) / 2;
 const API_BASE_URL = 'https://ohanatienda.ddns.net';
+const DEFAULT_IMAGE = require('@/assets/images/camiseta1.jpg');
+
+// Sistema global de caché de imágenes
+const ImageCache = {
+  failedImages: new Set<string>(),
+  validImages: new Set<string>(),
+  markAsFailed: (url: string) => {
+    if (url && url.trim() !== '') {
+      ImageCache.failedImages.add(url);
+    }
+  },
+  markAsValid: (url: string) => {
+    if (url && url.trim() !== '') {
+      ImageCache.validImages.add(url);
+    }
+  },
+  hasFailed: (url: string) => {
+    return !url || url.trim() === '' || ImageCache.failedImages.has(url);
+  },
+  isValid: (url: string) => {
+    return url && url.trim() !== '' && ImageCache.validImages.has(url);
+  },
+  reset: () => {
+    ImageCache.failedImages.clear();
+    ImageCache.validImages.clear();
+  }
+};
+
+// Función para normalizar URLs de imágenes
+const normalizeImageUrl = (imageUrl: string): string => {
+  if (!imageUrl || typeof imageUrl !== 'string') return '';
+  
+  try {
+    imageUrl = imageUrl.trim();
+    
+    if (ImageCache.hasFailed(imageUrl)) return '';
+    
+    if (imageUrl.startsWith('http')) {
+      return imageUrl;
+    }
+    
+    if (imageUrl.startsWith('//')) {
+      return `https:${imageUrl}`;
+    }
+    
+    const path = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+    
+    return `${API_BASE_URL}${path}`;
+  } catch (error) {
+    console.error('Error normalizando URL:', error, 'URL original:', imageUrl);
+    return '';
+  }
+};
 
 export default function TiendaScreen() {
   const params = useLocalSearchParams();
@@ -81,6 +134,7 @@ export default function TiendaScreen() {
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [isChangingCategory, setIsChangingCategory] = useState(false);
   const [paramsProcessed, setParamsProcessed] = useState(false);
+  const [networkError, setNetworkError] = useState<string | null>(null);
   
   // Estados para el toast personalizado
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -200,9 +254,9 @@ export default function TiendaScreen() {
       const isFav = await esFavorito(productId);
       
       if (isFav) {
-        showToast('Eliminado de favoritos', 'success', 'heart');
+        showToast('Añadido a favoritos', 'success', 'heart');
       } else {
-        showToast('Añadido a favoritos', 'info', 'heart-outline');
+        showToast('Eliminado de favoritos', 'info', 'heart-outline');
       }
       
     } catch (error) {
@@ -270,6 +324,8 @@ export default function TiendaScreen() {
         if (toastTimeout.current) {
           clearTimeout(toastTimeout.current);
         }
+        // Limpiar caché de imágenes
+        ImageCache.reset();
       };
     }, [])
   );
@@ -329,54 +385,87 @@ export default function TiendaScreen() {
     }
   }, [params, paramsProcessed]);
 
-  // Función mejorada para cargar todos los productos sin paginación y sin toasts
+  // Componente para mostrar errores de red
+  const renderNetworkError = () => {
+    if (!networkError) return null;
+    
+    return (
+      <View style={styles.networkErrorContainer}>
+        <FontAwesome5 name="wifi-slash" size={50} color="#ff3b30" />
+        <Text style={styles.networkErrorTitle}>Error de conexión</Text>
+        <Text style={styles.networkErrorText}>
+          No se pudo conectar con el servidor. Por favor, verifica tu conexión 
+          a Internet e inténtalo de nuevo.
+        </Text>
+        <TouchableOpacity 
+          style={styles.retryButton}
+          onPress={() => {
+            setNetworkError(null);
+            setLoading(true);
+            loadAllProducts();
+          }}
+        >
+          <Text style={styles.retryButtonText}>Reintentar</Text>
+          <FontAwesome5 name="sync" size={16} color="#fff" />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  // Función mejorada para cargar todos los productos sin paginación
   const loadAllProducts = useCallback(async () => {
     if (!selectedGender) return;
 
     setIsLoadingAllProducts(true);
     setLoading(true);
+    setNetworkError(null);
     
     try {
       // Arrays para almacenar todos los productos
       let allGenderProducts: Product[] = [];
       let allUnisexProducts: Product[] = [];
       
-      // Cargar todos los productos del género seleccionado (todas las páginas)
-      let genderNextPageUrl = `${API_BASE_URL}/api/productos/genero/${selectedGender}`;
-      let pageCount = 0;
+      // Configuración para axios
+      const axiosConfig = {
+        timeout: 20000, // 20 segundos
+      };
       
-      while (genderNextPageUrl && pageCount < 10) { // Límite de seguridad de 10 páginas
-        pageCount++;
-        
-        const genderResponse = await axios.get(genderNextPageUrl);
+      // Cargar productos del género seleccionado
+      try {
+        const genderResponse = await axios.get(
+          `${API_BASE_URL}/api/productos/genero/${selectedGender}`, 
+          axiosConfig
+        );
         
         if (genderResponse.data && genderResponse.data.data) {
-          // Añadir productos de esta página al array total
-          allGenderProducts = [...allGenderProducts, ...genderResponse.data.data];
-          // Verificar si hay siguiente página
-          genderNextPageUrl = genderResponse.data.next_page_url;
-        } else {
-          genderNextPageUrl = '';
+          allGenderProducts = genderResponse.data.data;
+        }
+      } catch (error) {
+        console.error('Error cargando productos por género:', error);
+        if (axios.isAxiosError(error) && !error.response) {
+          throw new Error('Error de conexión');
         }
       }
       
-      // Cargar todos los productos unisex (todas las páginas)
-      let unisexNextPageUrl = `${API_BASE_URL}/api/productos/genero/unisex`;
-      pageCount = 0;
-      
-      while (unisexNextPageUrl && pageCount < 10) { // Límite de seguridad de 10 páginas
-        pageCount++;
-        
-        const unisexResponse = await axios.get(unisexNextPageUrl);
+      // Cargar productos unisex (opcional, continuar aunque falle)
+      try {
+        const unisexResponse = await axios.get(
+          `${API_BASE_URL}/api/productos/genero/unisex`, 
+          axiosConfig
+        );
         
         if (unisexResponse.data && unisexResponse.data.data) {
-          // Añadir productos de esta página al array total
-          allUnisexProducts = [...allUnisexProducts, ...unisexResponse.data.data];
-          // Verificar si hay siguiente página
-          unisexNextPageUrl = unisexResponse.data.next_page_url;
-        } else {
-          unisexNextPageUrl = '';
+          allUnisexProducts = unisexResponse.data.data;
         }
+      } catch (error) {
+        console.error('Error cargando productos unisex:', error);
+        // Continuar aunque falle la carga de unisex
+      }
+      
+      // Si no se obtuvo ningún producto, mostrar error
+      if (allGenderProducts.length === 0 && allUnisexProducts.length === 0) {
+        setNetworkError('No se pudieron cargar productos. Verifica tu conexión.');
+        throw new Error('No se obtuvieron productos');
       }
       
       // Filtrar duplicados al combinar los arrays
@@ -391,12 +480,12 @@ export default function TiendaScreen() {
       setAllProducts(allProductsData);
       setFilteredProducts(allProductsData); 
       setDisplayedProducts(allProductsData);
-      setHasMoreProducts(false); // Ya no necesitamos más paginación
       
-      console.log(`Cargados ${allProductsData.length} productos en total (${allGenderProducts.length} ${selectedGender} + ${uniqueUnisexProducts.length} unisex)`);
+      console.log(`Cargados ${allProductsData.length} productos (${selectedGender} + unisex)`);
       
     } catch (error) {
       console.error('Error loading products:', error);
+      setNetworkError('No se pudo conectar con el servidor. Verifica tu conexión a Internet.');
       setAllProducts([]);
       setFilteredProducts([]);
       setDisplayedProducts([]);
@@ -405,7 +494,7 @@ export default function TiendaScreen() {
       setLoading(false);
       setIsChangingCategory(false);
     }
-  }, [selectedGender]);
+  }, [selectedGender, API_BASE_URL]);
 
   // Cargar productos cuando se selecciona el género
   useEffect(() => {
@@ -798,6 +887,9 @@ export default function TiendaScreen() {
   const renderProduct = ({ item }: { item: Product }) => {
     // Ya tenemos el estado de favoritos en el hook, por lo que no necesitamos consultar cada vez
     const isFavorite = favoritos.includes(item.id);
+    
+    // Usar la función normalizeImageUrl para gestionar la imagen correctamente
+    const imageUrl = normalizeImageUrl(item.imagen);
 
     return (
       <View style={styles.productCard}>
@@ -811,9 +903,14 @@ export default function TiendaScreen() {
           }}
         >
           <Image 
-            source={{ uri: `${API_BASE_URL}/${item.imagen}` }}
+            source={imageUrl ? { uri: imageUrl } : DEFAULT_IMAGE}
             style={styles.productImage}
             resizeMode="cover"
+            onLoad={() => ImageCache.markAsValid(item.imagen)}
+            onError={() => {
+              console.log("Error cargando imagen:", item.imagen);
+              ImageCache.markAsFailed(item.imagen);
+            }}
           />
           <TouchableOpacity 
             style={styles.favoriteButton}
@@ -941,6 +1038,9 @@ export default function TiendaScreen() {
             </View>
 
             {showFilters && renderFilters()}
+
+            {/* Mostrar error de red si existe */}
+            {networkError && renderNetworkError()}
 
             {(loading && filteredProducts.length === 0) || loadingFavoritos ? (
               <View style={styles.loadingContainer}>
@@ -1303,7 +1403,7 @@ const styles = StyleSheet.create({
     borderRadius: 35,
     borderWidth: 3,
     borderColor: '#f0f0f0',
-    borderTopColor: '#CAAB8F', // Color dorado elegante, como la identidad de marca
+    borderTopColor: '#CAAB8F', // Color dorado elegante
     position: 'absolute',
   },
   spinnerIcon: {
@@ -1413,5 +1513,44 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
+  },
+  // Estilos para el error de red
+  networkErrorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 30,
+    marginVertical: 50,
+  },
+  networkErrorTitle: {
+    fontSize: 22,
+    fontWeight: 'bold', 
+    color: '#333',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  networkErrorText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 12,
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 10,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
+    marginRight: 8,
   },
 });

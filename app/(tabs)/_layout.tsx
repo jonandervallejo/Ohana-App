@@ -166,7 +166,7 @@ export default function TabLayout() {
         }}
       />
       
-      <Tabs.Screen
+      {/*<Tabs.Screen
         name="notificaciones"
         listeners={{
           tabPress: () => animateIcon('bell')
@@ -191,7 +191,7 @@ export default function TabLayout() {
         }}
       />
 
-      {/*<Tabs.Screen
+      <Tabs.Screen
         name="registro"
         listeners={{
           tabPress: () => animateIcon('user')

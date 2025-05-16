@@ -61,6 +61,60 @@ interface ToastMessage {
 }
 
 const { width, height } = Dimensions.get('window');
+const API_BASE_URL = 'https://ohanatienda.ddns.net';
+const DEFAULT_IMAGE = require('@/assets/images/camiseta1.jpg');
+
+// Sistema global de caché de imágenes
+const ImageCache = {
+  failedImages: new Set<string>(),
+  validImages: new Set<string>(),
+  markAsFailed: (url: string) => {
+    if (url && url.trim() !== '') {
+      ImageCache.failedImages.add(url);
+    }
+  },
+  markAsValid: (url: string) => {
+    if (url && url.trim() !== '') {
+      ImageCache.validImages.add(url);
+    }
+  },
+  hasFailed: (url: string) => {
+    return !url || url.trim() === '' || ImageCache.failedImages.has(url);
+  },
+  isValid: (url: string) => {
+    return url && url.trim() !== '' && ImageCache.validImages.has(url);
+  },
+  reset: () => {
+    ImageCache.failedImages.clear();
+    ImageCache.validImages.clear();
+  }
+};
+
+// Función para normalizar URLs de imágenes
+const normalizeImageUrl = (imageUrl: string): string => {
+  if (!imageUrl || typeof imageUrl !== 'string') return '';
+  
+  try {
+    imageUrl = imageUrl.trim();
+    
+    if (ImageCache.hasFailed(imageUrl)) return '';
+    
+    if (imageUrl.startsWith('http')) {
+      return imageUrl;
+    }
+    
+    if (imageUrl.startsWith('//')) {
+      return `https:${imageUrl}`;
+    }
+    
+    const path = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+    
+    return `${API_BASE_URL}${path}`;
+  } catch (error) {
+    console.error('Error normalizando URL:', error, 'URL original:', imageUrl);
+    return '';
+  }
+};
 
 const ProductDetail = () => {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -135,12 +189,12 @@ const ProductDetail = () => {
     
     try {
       // Busca tanto en productos de Hombre como de mujer
-      const response = await axios.get(`http://ohanatienda.ddns.net:8080/api/productos/buscar?q=${encodeURIComponent(query)}`);
+      const response = await axios.get(`${API_BASE_URL}/api/productos/buscar?q=${encodeURIComponent(query)}`);
       
       if (response.data && Array.isArray(response.data)) {
         const formattedResults = response.data.map((product: any) => ({
           ...product,
-          imagen_url: `http://ohanatienda.ddns.net:8080/${product.imagen}`
+          imagen_url: normalizeImageUrl(product.imagen)
         }));
         setSearchResults(formattedResults);
       } else {
@@ -206,6 +260,7 @@ const ProductDetail = () => {
       if (toastTimeout.current) {
         clearTimeout(toastTimeout.current);
       }
+      ImageCache.reset();
     };
   }, []);
   
@@ -269,7 +324,7 @@ const ProductDetail = () => {
     
     const fetchProductDetails = async () => {
       try {
-        const response = await axios.get(`http://ohanatienda.ddns.net:8080/api/productos/${id}`);
+        const response = await axios.get(`${API_BASE_URL}/api/productos/${id}`);
         console.log("Respuesta del API:", JSON.stringify(response.data));
         setProduct(response.data);
       } catch (error) {
@@ -295,7 +350,7 @@ const ProductDetail = () => {
     if (!product) return [];
 
     // Imagen principal siempre al inicio
-    const mainImageUrl = `http://ohanatienda.ddns.net:8080/${product.imagen}`;
+    const mainImageUrl = normalizeImageUrl(product.imagen);
     const mainImage = { 
       id: 'main',
       url: mainImageUrl
@@ -310,21 +365,21 @@ const ProductDetail = () => {
         if (img && img.ruta) {
           return {
             id: img.id || `carousel-${img.orden || index}`,
-            url: `http://ohanatienda.ddns.net:8080/${img.ruta}`
+            url: normalizeImageUrl(img.ruta)
           };
         } 
         // Si ya tiene el formato del frontend (con campo 'url')
         else if (img && img.url) {
           return {
             id: img.id || `carousel-${index}`,
-            url: img.url.startsWith('http') ? img.url : `http://ohanatienda.ddns.net:8080/${img.url}`
+            url: normalizeImageUrl(img.url)
           };
         }
         // Si es solo un string (url directa)
         else if (typeof img === 'string') {
           return {
             id: `img-${Math.random().toString(36).substr(2, 9)}`,
-            url: img.startsWith('http') ? img : `http://ohanatienda.ddns.net:8080/${img}`
+            url: normalizeImageUrl(img)
           };
         }
         return null;
@@ -674,9 +729,13 @@ const ProductDetail = () => {
                     activeOpacity={0.7}
                   >
                     <Image 
-                      source={{ uri: item.imagen_url || `http://ohanatienda.ddns.net:8080/${item.imagen}` }}
+                      source={item.imagen_url ? { uri: item.imagen_url } : DEFAULT_IMAGE}
                       style={styles.searchResultImage}
                       resizeMode="cover"
+                      onError={() => {
+                        console.log("Error cargando imagen en búsqueda:", item.imagen);
+                        ImageCache.markAsFailed(item.imagen);
+                      }}
                     />
                     <View style={styles.searchResultInfo}>
                       <Text style={styles.searchResultName} numberOfLines={1}>
@@ -779,12 +838,16 @@ const ProductDetail = () => {
                   renderItem={({ item }) => (
                     <View style={styles.imageSlide}>
                       <Image 
-                        source={{ uri: item.url }}
+                        source={item.url ? { uri: item.url } : DEFAULT_IMAGE}
                         style={styles.productImage}
                         resizeMode="contain"
                         accessible={true}
                         accessibilityLabel={`Imagen de ${product.nombre}`}
                         accessibilityRole="image"
+                        onError={() => {
+                          console.log("Error cargando imagen en carrusel:", item.url);
+                          ImageCache.markAsFailed(item.url || '');
+                        }}
                       />
                     </View>
                   )}

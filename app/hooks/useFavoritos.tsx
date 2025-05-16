@@ -1,6 +1,5 @@
-import React,{ useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-//import axios from 'axios';
 
 export const useFavoritos = () => {
   const [favoritos, setFavoritos] = useState<number[]>([]);
@@ -149,3 +148,8 @@ export const useFavoritos = () => {
     userId
   };
 };
+
+// Exportar un componente vacío para cumplir con los requisitos de Expo Router
+export default function FavoritosProvider() {
+  return null;
+}

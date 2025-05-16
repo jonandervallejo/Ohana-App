@@ -1,4 +1,4 @@
-import React,{ createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 
@@ -218,4 +218,9 @@ export function useCart() {
     throw new Error('useCart must be used within a CartProvider');
   }
   return context;
+}
+
+// Exportar un componente vacío para cumplir con los requisitos de Expo Router
+export default function CartProviderDefault() {
+  return null;
 }

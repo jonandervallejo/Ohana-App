@@ -43,7 +43,7 @@ export default function Notificaciones() {
         renderItem={({ item }) => <NotificacionItem item={item} />}
         contentContainerStyle={{ paddingTop: 10 }}
       />
-      <View style={styles.tabBar}>
+      {/*<View style={styles.tabBar}>
         <TouchableOpacity style={styles.tabItem}>
           <Image source={require('../../assets/images/home.jpg')} style={styles.tabIcon} />
         </TouchableOpacity>
@@ -54,7 +54,7 @@ export default function Notificaciones() {
           <Image source={require('../../assets/images/bell.jpg')} style={styles.tabIcon} />
           <View style={styles.badge}><Text style={styles.badgeText}>1</Text></View>
         </TouchableOpacity>
-      </View>
+      </View>*/}
     </View>
   );
 }

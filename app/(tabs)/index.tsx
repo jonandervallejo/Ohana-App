@@ -8,6 +8,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack } from 'expo-router';
+import * as CartHook from '../hooks/useCart'; // Importación modificada
+import * as FavoritosHook from '../hooks/useFavoritos'; // Importación modificada
+
+// Usar las exportaciones nombradas de los hooks
+const { useCart } = CartHook;
+const { useFavoritos } = FavoritosHook;
 
 interface ImageData {
   id: number;
@@ -61,15 +67,17 @@ const CATEGORY_IMAGES = {
   chaqueta: require('@/assets/images/chaqueta.jpg')
 };
 
+// Imágenes precargadas para categorías
+const CATEGORY_IMAGE_LOADERS = Object.values(CATEGORY_IMAGES).map(img => Image.prefetch(Image.resolveAssetSource(img).uri));
+
 //dominio para llamadas a la API
 const API_BASE_URL = 'https://ohanatienda.ddns.net';
 
 // Sistema global de caché de imágenes mejorado
 const ImageCache = {
   failedImages: new Set<string>(),
-  validImages: new Set<string>(), // Añadido para almacenar URLs válidas
+  validImages: new Set<string>(),
   markAsFailed: (url: string) => {
-    // Evitar añadir URLs vacías o undefined
     if (url && url.trim() !== '') {
       ImageCache.failedImages.add(url);
     }
@@ -97,21 +105,24 @@ const normalizeImageUrl = (imageUrl: string): string => {
   
   try {
     imageUrl = imageUrl.trim();
- 
-    // Si la URL ya incluye la base completa, úsala como está
-    if (imageUrl.startsWith('https')) {
-      //console.log('entra al if***************')
+    
+    // Verificar si ya es una URL completa
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
       return imageUrl;
     }
-
-    return `${API_BASE_URL}${imageUrl}`; 
     
+    // Verificar si ya tiene una barra al principio
+    if (!imageUrl.startsWith('/')) {
+      imageUrl = '/' + imageUrl;
+    }
+    
+    return `${API_BASE_URL}${imageUrl}`;
   } catch (error) {  
     console.error('Error normalizando URL:', error, 'URL original:', imageUrl);
     return '';
   }
 };
- 
+
 // Componente optimizado para renderizar imágenes con fallback
 const SafeImage = ({ 
   source, 
@@ -129,42 +140,59 @@ const SafeImage = ({
   imageKey?: string | number
 }) => {
   const [hasError, setHasError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
   // Si la fuente es una URL y ya sabemos que falla, mostrar directamente el fallback
   const isRemoteSource = source && typeof source === 'object' && source.uri;
   const sourceUri = isRemoteSource ? source.uri : null;
-  const useDirectFallback = isRemoteSource && ImageCache.hasFailed(sourceUri);
+  const useDirectFallback = isRemoteSource && (ImageCache.hasFailed(sourceUri) || !sourceUri || sourceUri.trim() === '');
   
   if (useDirectFallback) {
     return <Image source={fallbackSource} style={style} resizeMode={resizeMode} />;
   }
   
   return (
-    <ImageBackground
-      source={fallbackSource}
-      style={style}
-      resizeMode={resizeMode}
-    >
+    <View style={style}>
+      {/* Fallback base siempre visible */}
+      <Image 
+        source={fallbackSource} 
+        style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} 
+        resizeMode={resizeMode} 
+      />
+      
+      {/* Indicador de carga encima del fallback */}
+      {isLoading && isRemoteSource && !hasError && (
+        <View style={[StyleSheet.absoluteFill, styles.imageLoadingOverlay]}>
+          <ActivityIndicator size="small" color="#ffffff" />
+        </View>
+      )}
+      
+      {/* Imagen real encima del fallback cuando carga */}
       {!hasError && isRemoteSource && (
         <Image 
           source={source}
-          style={[style, { position: 'absolute', top: 0, left: 0 }]}
+          style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
           resizeMode={resizeMode}
+          onLoadStart={() => setIsLoading(true)}
+          onLoadEnd={() => setIsLoading(false)}
           onError={() => {
             setHasError(true);
+            setIsLoading(false);
             if (sourceUri) {
+              console.log(`Imagen falló: ${sourceUri}`);
               ImageCache.markAsFailed(sourceUri);
             }
             if (onError) onError();
           }}
           onLoad={() => {
+            setIsLoading(false);
             if (sourceUri) {
               ImageCache.markAsValid(sourceUri);
             }
           }}
         />
       )}
-    </ImageBackground>
+    </View>
   );
 };
 
@@ -268,6 +296,7 @@ const UserAvatar = ({
   );
 };
 
+// Carrusel mejorado con precarga y mejor manejo de errores
 const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => {
   const [images, setImages] = useState<ImageData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -275,21 +304,49 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
   const [selectedImage, setSelectedImage] = useState<ImageData | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [imageErrors, setImageErrors] = useState<{[key: number]: boolean}>({});
+  const timerRef = useRef<NodeJS.Timeout | number | null>(null);
+
+  // Función mejorada para procesar las rutas de imágenes
+  const processImagePath = (imageUrl: string | null): string => {
+    if (!imageUrl) return '';
+    
+    try {
+      // Verificar si es una ruta relativa o absoluta
+      const isFullPath = imageUrl.includes('/uploads/productos/');
+      
+      if (isFullPath) {
+        return normalizeImageUrl(imageUrl);
+      } else {
+        // Asumir que solo es el nombre del archivo
+        return normalizeImageUrl(`${imageUrl}`);
+      }
+    } catch (error) {
+      console.error('Error procesando ruta de imagen:', error);
+      return '';
+    }
+  };
 
   useEffect(() => {
     const fetchImages = async () => {
       try {
+        setLoading(true);
+        console.log('Obteniendo imágenes para carrusel...');
+        
         const response = await axios.get(`${API_BASE_URL}/api/productos/imagenes`);
         if (response.data && Array.isArray(response.data)) {
+          // Procesar las rutas de imágenes de forma más robusta
           const processedImages = response.data.map((img: ImageData) => {
-            // Extraer solo el nombre del archivo de la ruta
-            const imageName = img.imagen ? img.imagen.split('/').pop() : '';
             return {
               ...img,
-              imagen: normalizeImageUrl(`/uploads/productos/${imageName}`)
+              imagen: processImagePath(img.imagen)
             };
-          });
-          setImages(processedImages);
+          }).filter(img => img.imagen !== ''); // Filtrar imágenes sin URL válida
+          
+          console.log(`Carrusel: ${processedImages.length} imágenes procesadas`);
+          setImages(processedImages.length > 0 ? processedImages : [
+            { id: 1, nombre: 'Producto destacado', imagen: '' },
+            { id: 2, nombre: 'Oferta especial', imagen: '' },
+          ]);
         } else {
           throw new Error('Formato de respuesta inválido');
         }
@@ -306,6 +363,13 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
     };
 
     fetchImages();
+    
+    // Limpia el temporizador al desmontar
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
   }, []);
 
   // Manejar errores de carga de imagen
@@ -323,7 +387,13 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
   useEffect(() => {
     if (!loading && images.length > 0) {
       const containerWidth = width - 30; // Ancho real del contenedor
-      const timer = setInterval(() => {
+      
+      // Limpiar el temporizador anterior si existe
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+      
+      timerRef.current = setInterval(() => {
         setCurrentIndex((prevIndex) => {
           const nextIndex = (prevIndex + 1) % images.length;
           scrollRef.current?.scrollTo({
@@ -334,7 +404,11 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
         });
       }, 4000);
 
-      return () => clearInterval(timer);
+      return () => {
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+        }
+      };
     }
   }, [loading, images.length]);
 
@@ -356,7 +430,7 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
             onMomentumScrollEnd={(event) => {
               const containerWidth = width - 30;
               const newIndex = Math.round(event.nativeEvent.contentOffset.x / containerWidth);
-              setCurrentIndex(newIndex);
+              setCurrentIndex(Math.min(Math.max(0, newIndex), images.length - 1)); // Prevenir índices inválidos
             }}
           >
             {images.map((image) => (
@@ -369,12 +443,12 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
                 }}
               >
                 <SafeImage
-                  source={{ uri: image.imagen }}
+                  source={image.imagen ? { uri: image.imagen } : undefined}
                   fallbackSource={DEFAULT_IMAGE}
                   style={styles.carruselImage}
                   resizeMode="cover"
                   onError={() => handleImageError(image.id)}
-                  imageKey={image.id}
+                  imageKey={`carrusel-${image.id}`}
                 />
                 <View style={styles.imageOverlay}>
                   <Text style={styles.imageTitle}>{image.nombre}</Text>             
@@ -409,12 +483,12 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
           <View style={styles.modalContent}>
             {selectedImage && (
               <SafeImage
-                source={{ uri: selectedImage.imagen }}
+                source={selectedImage.imagen ? { uri: selectedImage.imagen } : undefined}
                 fallbackSource={DEFAULT_IMAGE}
                 style={styles.enlargedImage}
                 resizeMode="contain"
                 onError={() => handleImageError(selectedImage.id)}
-                imageKey={selectedImage.id}
+                imageKey={`modal-${selectedImage.id}`}
               />
             )}
             <Text style={styles.enlargedImageTitle}>{selectedImage?.nombre}</Text>
@@ -425,10 +499,64 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
   );
 };
 
-const HomeScreen = () => {
+// Componente optimizado para categorías con precarga
+const CategoryItem = React.memo(({ 
+  category, 
+  index, 
+  onPress 
+}: { 
+  category: Category, 
+  index: number, 
+  onPress: (name: string, id: number) => void 
+}) => {
+  // Usamos un estado local para evitar rerenderizaciones innecesarias
+  const [imageSource] = useState(() => getCategoryImage(category.nombre_cat));
+  
+  return (
+    <TouchableOpacity 
+      key={category.key || `${category.id}-${index}`} 
+      style={styles.categoryItem}
+      onPress={() => onPress(category.nombre_cat, category.id)}
+    >
+      <View style={styles.categoryImageWrapper}>
+        <Image 
+          source={imageSource} 
+          style={styles.categoryImage}
+          resizeMode="cover"
+        />
+        <View style={styles.categoryOverlay} />
+      </View>
+      <Text style={styles.categoryName} numberOfLines={1}>
+        {category.nombre_cat}
+      </Text>
+    </TouchableOpacity>
+  );
+});
 
-  
-  
+// Función optimizada para obtener imágenes por categoría
+const getCategoryImage = (categoryName: string) => {
+  try {
+    if (!categoryName) return DEFAULT_IMAGE;
+    
+    // Convertir a minúsculas para comparación sin distinción de mayúsculas/minúsculas
+    const name = categoryName.toLowerCase();
+    
+    // Buscar coincidencia en las claves del objeto CATEGORY_IMAGES
+    for (const key of Object.keys(CATEGORY_IMAGES)) {
+      if (name.includes(key)) {
+        return CATEGORY_IMAGES[key as keyof typeof CATEGORY_IMAGES];
+      }
+    }
+    
+    // Default image si no coincide con ninguna categoría conocida
+    return DEFAULT_IMAGE;
+  } catch (error) {
+    console.error(`Error cargando imagen para categoría '${categoryName}':`, error);
+    return DEFAULT_IMAGE;
+  }
+};
+
+const HomeScreen = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [infiniteCategories, setInfiniteCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
@@ -458,6 +586,14 @@ const HomeScreen = () => {
   const categoriesScrollRef = useRef<ScrollView>(null);
   const productsScrollRef = useRef<ScrollView>(null);
   const carruselScrollRef = useRef<ScrollView>(null);
+
+  // Precargar imágenes de categoría
+  useEffect(() => {
+    // Iniciar precarga de imágenes
+    Promise.all(CATEGORY_IMAGE_LOADERS)
+      .then(() => console.log("Imágenes de categorías precargadas"))
+      .catch(err => console.warn("Error al precargar imágenes:", err));
+  }, []);
 
   // Verificación de autenticación mejorada
   useFocusEffect(
@@ -607,29 +743,6 @@ const HomeScreen = () => {
       }
     };
   }, []);
-
-  // Función optimizada para obtener imágenes por categoría
-  const getCategoryImage = (categoryName: string) => {
-    try {
-      if (!categoryName) return DEFAULT_IMAGE;
-      
-      // Convertir a minúsculas para comparación sin distinción de mayúsculas/minúsculas
-      const name = categoryName.toLowerCase();
-      
-      // Buscar coincidencia en las claves del objeto CATEGORY_IMAGES
-      for (const key of Object.keys(CATEGORY_IMAGES)) {
-        if (name.includes(key)) {
-          return CATEGORY_IMAGES[key as keyof typeof CATEGORY_IMAGES];
-        }
-      }
-      
-      // Default image si no coincide con ninguna categoría conocida
-      return DEFAULT_IMAGE;
-    } catch (error) {
-      console.error(`Error cargando imagen para categoría '${categoryName}':`, error);
-      return DEFAULT_IMAGE;
-    }
-  };
 
   // Función para calcular el offset de desplazamiento
   const calculateScrollOffset = (itemsCount: number, itemWidth: number = 90 + 16) => {
@@ -1071,23 +1184,12 @@ const HomeScreen = () => {
               scrollEventThrottle={16}
             >
               {infiniteCategories.map((category, index) => (
-                <TouchableOpacity 
-                  key={category.key || `${category.id}-${index}`} 
-                  style={styles.categoryItem}
-                  onPress={() => handleCategoryPress(category.nombre_cat, category.id)}
-                >
-                  <View style={styles.categoryImageWrapper}>
-                    <Image 
-                      source={getCategoryImage(category.nombre_cat)} 
-                      style={styles.categoryImage}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.categoryOverlay} />
-                  </View>
-                  <Text style={styles.categoryName} numberOfLines={1}>
-                    {category.nombre_cat}
-                  </Text>
-                </TouchableOpacity>
+                <CategoryItem 
+                  key={category.key || `${category.id}-${index}`}
+                  category={category}
+                  index={index}
+                  onPress={handleCategoryPress}
+                />
               ))}
             </ScrollView>
           )}
@@ -1602,6 +1704,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#333',
     textAlign: 'center',
+  },
+  imageLoadingOverlay: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
   },
 });
 
