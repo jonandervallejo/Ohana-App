@@ -17,10 +17,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, Stack, useFocusEffect } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import axios from 'axios';
 import { useFavoritos } from './hooks/useFavoritos'; // Importar el hook compartido
 import { useCart } from './hooks/useCart'; // Importar el hook de carrito
+import { useFocusEffect } from '@react-navigation/native';
+
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 45) / 2; // Dos columnas con padding
@@ -312,6 +314,7 @@ const FavoritosScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [removingIds, setRemovingIds] = useState<Set<number>>(new Set());
   const fadeAnim = useState(new Animated.Value(0))[0];
+
   
   // Estados para el toast personalizado
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -835,9 +838,13 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   backButton: {
-    padding: 8,
-    borderRadius: 20,
-  },
+  width: 44,
+  height: 44,
+  borderRadius: 22,
+  alignItems: 'center',
+  justifyContent: 'center',
+  backgroundColor: 'transparent',
+},
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',

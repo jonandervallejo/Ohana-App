@@ -30,6 +30,7 @@ interface Category {
   created_at: string | null;
   updated_at: string | null;
   key?: string;
+  imagen?: string; // Añadido campo para imagen de categoría
 }
 
 interface Product {
@@ -54,26 +55,23 @@ const { width } = Dimensions.get('window');
 
 // ********************************ELIMINAR TODO LO QUE SE SAQUE DESDE LOCAL************************************
 const DEFAULT_IMAGE = require('@/assets/images/camiseta1.jpg');
-const CATEGORY_IMAGES = {
-  bolso: require('@/assets/images/bolso.jpg'),
-  falda: require('@/assets/images/falda.jpg'),
-  jersey: require('@/assets/images/camisa1.jpg'),
-  camiseta: require('@/assets/images/camiseta1.jpg'),
-  pantalon: require('@/assets/images/pantalon1.jpg'),
-  vestido: require('@/assets/images/falda1.jpg'),
-  abrigo: require('@/assets/images/camisa1.jpg'),
-  zapato: require('@/assets/images/accesorio1.jpg'),
-  accesorio: require('@/assets/images/accesorio.jpg'),
-  chaqueta: require('@/assets/images/chaqueta.jpg')
-};
-
-// Imágenes precargadas para categorías
-const CATEGORY_IMAGE_LOADERS = Object.values(CATEGORY_IMAGES).map(img => Image.prefetch(Image.resolveAssetSource(img).uri));
 
 //dominio para llamadas a la API
 const API_BASE_URL = 'https://ohanatienda.ddns.net';
 
-// Sistema global de caché de imágenes mejorado
+// URLs para imágenes de categorías
+const CATEGORY_IMAGES = {
+  'bolso': `${API_BASE_URL}/uploads/productos/1744189795_principal_67f63963026b1.jpg`,
+  'falda': `${API_BASE_URL}/uploads/productos/1744189566_principal_67f6387e09731.jpg`,
+  'camiseta': `${API_BASE_URL}/uploads/productos/1744188455_principal_67f63427ac95f.jpg`,
+  'pantalon': `${API_BASE_URL}/uploads/productos/1744189736_principal_67f63928558be.jpg`,
+  'vestido': `${API_BASE_URL}/uploads/productos/1744189566_principal_67f6387e09731.jpg`,
+  'accesorio': `${API_BASE_URL}/uploads/productos/1744189663_principal_67f638dfd3649.jpg`,
+  'chaqueta': `${API_BASE_URL}/uploads/productos/1744189602_principal_67f638a2c21d9.jpg`,
+  'default': `${API_BASE_URL}/uploads/categorias/default.jpg`,
+};
+
+//sistema global de caché de imágenes
 const ImageCache = {
   failedImages: new Set<string>(),
   validImages: new Set<string>(),
@@ -109,6 +107,16 @@ const normalizeImageUrl = (imageUrl: string): string => {
     // Verificar si ya es una URL completa
     if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
       return imageUrl;
+    }
+    
+    // Limpiar rutas duplicadas si existen
+    imageUrl = imageUrl.replace(/\/uploads\/productos\/uploads\/productos\//, '/uploads/productos/');
+    
+    // Verificar si está en formato /uploads/productos/TIMESTAMP_principal_HASH.jpg
+    if (imageUrl.includes('_principal_')) {
+      if (!imageUrl.includes('/uploads/productos/')) {
+        imageUrl = `${imageUrl}`;
+      }
     }
     
     // Verificar si ya tiene una barra al principio
@@ -311,19 +319,45 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
     if (!imageUrl) return '';
     
     try {
-      // Verificar si es una ruta relativa o absoluta
-      const isFullPath = imageUrl.includes('/uploads/productos/');
-      
-      if (isFullPath) {
-        return normalizeImageUrl(imageUrl);
-      } else {
-        // Asumir que solo es el nombre del archivo
-        return normalizeImageUrl(`${imageUrl}`);
+      // Si ya es una URL completa, mantenerla
+      if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+        return imageUrl;
       }
+      
+      // Limpiar posibles duplicaciones de ruta
+      let cleanPath = imageUrl
+        .replace(/\/uploads\/productos\/uploads\/productos\//, '/uploads/productos/')
+        .trim();
+      
+      // Verificar si está en formato TIMESTAMP_principal_HASH.jpg
+      if (cleanPath.includes('_principal_')) {
+        // Asegurarse que tiene la ruta completa
+        if (!cleanPath.includes('/uploads/productos/')) {
+          return normalizeImageUrl(`/uploads/productos/${cleanPath}`);
+        }
+        return normalizeImageUrl(cleanPath);
+      }
+      
+      // Para otros formatos
+      if (!cleanPath.includes('/uploads/productos/')) {
+        return normalizeImageUrl(`/uploads/productos/${cleanPath}`);
+      }
+      
+      return normalizeImageUrl(cleanPath);
     } catch (error) {
       console.error('Error procesando ruta de imagen:', error);
       return '';
     }
+  };
+
+  // Función para barajar un array (algoritmo Fisher-Yates)
+  const shuffleArray = (array: any[]) => {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
   };
 
   useEffect(() => {
@@ -334,16 +368,21 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
         
         const response = await axios.get(`${API_BASE_URL}/api/productos/imagenes`);
         if (response.data && Array.isArray(response.data)) {
-          // Procesar las rutas de imágenes de forma más robusta
           const processedImages = response.data.map((img: ImageData) => {
             return {
               ...img,
               imagen: processImagePath(img.imagen)
             };
-          }).filter(img => img.imagen !== ''); // Filtrar imágenes sin URL válida
+          }).filter(img => img.imagen !== ''); //filtrar imágenes que no tienen url
           
-          console.log(`Carrusel: ${processedImages.length} imágenes procesadas`);
-          setImages(processedImages.length > 0 ? processedImages : [
+          // Barajar aleatoriamente las imágenes
+          const shuffledImages = shuffleArray(processedImages);
+          
+          // Limitar a máximo 10 imágenes para evitar sobrecarga
+          const limitedImages = shuffledImages.slice(0, 10);
+          
+          console.log(`Carrusel: ${limitedImages.length} imágenes procesadas (aleatorias, máximo 10)`);
+          setImages(limitedImages.length > 0 ? limitedImages : [
             { id: 1, nombre: 'Producto destacado', imagen: '' },
             { id: 2, nombre: 'Oferta especial', imagen: '' },
           ]);
@@ -499,7 +538,7 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
   );
 };
 
-// Componente optimizado para categorías con precarga
+// Componente optimizado para categorías con imágenes desde API
 const CategoryItem = React.memo(({ 
   category, 
   index, 
@@ -509,8 +548,24 @@ const CategoryItem = React.memo(({
   index: number, 
   onPress: (name: string, id: number) => void 
 }) => {
-  // Usamos un estado local para evitar rerenderizaciones innecesarias
-  const [imageSource] = useState(() => getCategoryImage(category.nombre_cat));
+  // Usa el mapeo de categorías para obtener la URL de la imagen correspondiente
+  const getCategoryImageUrl = (categoryName: string) => {
+    const name = categoryName.toLowerCase();
+    let imageKey = 'default';
+    
+    // Busca la palabra clave de la categoría en el nombre
+    for (const key of Object.keys(CATEGORY_IMAGES)) {
+      if (key !== 'default' && name.includes(key)) {
+        imageKey = key;
+        break;
+      }
+    }
+    
+    return CATEGORY_IMAGES[imageKey as keyof typeof CATEGORY_IMAGES];
+  };
+
+  // URL de imagen obtenida dinámicamente según la categoría
+  const imageUrl = getCategoryImageUrl(category.nombre_cat);
   
   return (
     <TouchableOpacity 
@@ -519,10 +574,12 @@ const CategoryItem = React.memo(({
       onPress={() => onPress(category.nombre_cat, category.id)}
     >
       <View style={styles.categoryImageWrapper}>
-        <Image 
-          source={imageSource} 
+        <SafeImage 
+          source={{ uri: imageUrl }}
+          fallbackSource={DEFAULT_IMAGE}
           style={styles.categoryImage}
           resizeMode="cover"
+          imageKey={`category-${category.id}`}
         />
         <View style={styles.categoryOverlay} />
       </View>
@@ -532,29 +589,6 @@ const CategoryItem = React.memo(({
     </TouchableOpacity>
   );
 });
-
-// Función optimizada para obtener imágenes por categoría
-const getCategoryImage = (categoryName: string) => {
-  try {
-    if (!categoryName) return DEFAULT_IMAGE;
-    
-    // Convertir a minúsculas para comparación sin distinción de mayúsculas/minúsculas
-    const name = categoryName.toLowerCase();
-    
-    // Buscar coincidencia en las claves del objeto CATEGORY_IMAGES
-    for (const key of Object.keys(CATEGORY_IMAGES)) {
-      if (name.includes(key)) {
-        return CATEGORY_IMAGES[key as keyof typeof CATEGORY_IMAGES];
-      }
-    }
-    
-    // Default image si no coincide con ninguna categoría conocida
-    return DEFAULT_IMAGE;
-  } catch (error) {
-    console.error(`Error cargando imagen para categoría '${categoryName}':`, error);
-    return DEFAULT_IMAGE;
-  }
-};
 
 const HomeScreen = () => {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -586,14 +620,6 @@ const HomeScreen = () => {
   const categoriesScrollRef = useRef<ScrollView>(null);
   const productsScrollRef = useRef<ScrollView>(null);
   const carruselScrollRef = useRef<ScrollView>(null);
-
-  // Precargar imágenes de categoría
-  useEffect(() => {
-    // Iniciar precarga de imágenes
-    Promise.all(CATEGORY_IMAGE_LOADERS)
-      .then(() => console.log("Imágenes de categorías precargadas"))
-      .catch(err => console.warn("Error al precargar imágenes:", err));
-  }, []);
 
   // Verificación de autenticación mejorada
   useFocusEffect(
@@ -762,8 +788,9 @@ const HomeScreen = () => {
       
       // Iniciar en la posición central después de un breve retraso
       setTimeout(() => {
+        const offset = calculateScrollOffset(categories.length);
         categoriesScrollRef.current?.scrollTo({ 
-          x: calculateScrollOffset(categories.length), 
+          x: offset, 
           animated: false 
         });
       }, 100);
@@ -782,14 +809,16 @@ const HomeScreen = () => {
       
       // Iniciar en la posición central después de un breve retraso
       setTimeout(() => {
+        const offset = calculateScrollOffset(products.length, 160 + 16);
         productsScrollRef.current?.scrollTo({ 
-          x: calculateScrollOffset(products.length, 160 + 16), 
+          x: offset, 
           animated: false 
         });
       }, 100);
     }
   }, [products]);
 
+  // Función mejorada para manejar el scroll de categorías
   const handleCategoriesScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (isAutoScrollingCategories || categories.length === 0) return;
 
@@ -798,31 +827,32 @@ const HomeScreen = () => {
     const originalSetWidth = categories.length * itemWidth;
     
     // Si ha llegado al principio del set duplicado
-    if (contentOffset < itemWidth) {
+    if (contentOffset < itemWidth / 2) {
       setIsAutoScrollingCategories(true);
-      // Saltar al final del set original
-      setTimeout(() => {
+      // Saltar al final del set original (duplicados anteriores)
+      requestAnimationFrame(() => {
         categoriesScrollRef.current?.scrollTo({
-          x: originalSetWidth + contentOffset,
+          x: originalSetWidth,
           animated: false
         });
         setIsAutoScrollingCategories(false);
-      }, 10);
+      });
     } 
     // Si ha llegado al final del set duplicado
-    else if (contentOffset > originalSetWidth * 2 - itemWidth) {
+    else if (contentOffset > originalSetWidth * 2 - itemWidth / 2) {
       setIsAutoScrollingCategories(true);
-      // Saltar al inicio del set original
-      setTimeout(() => {
+      // Saltar al inicio del set original (después del primer duplicado)
+      requestAnimationFrame(() => {
         categoriesScrollRef.current?.scrollTo({
-          x: contentOffset - originalSetWidth,
+          x: originalSetWidth,
           animated: false
         });
         setIsAutoScrollingCategories(false);
-      }, 10);
+      });
     }
   };
 
+  // Función mejorada para manejar el scroll de productos
   const handleProductsScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (isAutoScrollingProducts || products.length === 0) return;
 
@@ -831,28 +861,28 @@ const HomeScreen = () => {
     const originalSetWidth = products.length * itemWidth;
     
     // Si ha llegado al principio del set duplicado
-    if (contentOffset < itemWidth) {
+    if (contentOffset < itemWidth / 2) {
       setIsAutoScrollingProducts(true);
-      // Saltar al final del set original
-      setTimeout(() => {
+      // Saltar al final del set original (duplicados anteriores)
+      requestAnimationFrame(() => {
         productsScrollRef.current?.scrollTo({
-          x: originalSetWidth + contentOffset,
+          x: originalSetWidth,
           animated: false
         });
         setIsAutoScrollingProducts(false);
-      }, 10);
+      });
     } 
     // Si ha llegado al final del set duplicado
-    else if (contentOffset > originalSetWidth * 2 - itemWidth) {
+    else if (contentOffset > originalSetWidth * 2 - itemWidth / 2) {
       setIsAutoScrollingProducts(true);
-      // Saltar al inicio del set original
-      setTimeout(() => {
+      // Saltar al inicio del set original (después del primer duplicado)
+      requestAnimationFrame(() => {
         productsScrollRef.current?.scrollTo({
-          x: contentOffset - originalSetWidth,
+          x: originalSetWidth,
           animated: false
         });
         setIsAutoScrollingProducts(false);
-      }, 10);
+      });
     }
   };
 
@@ -970,8 +1000,8 @@ const HomeScreen = () => {
     });
   };
 
-  // Función para manejar la navegación al perfil del usuario de forma segura
-  const handleProfileNavigation = async () => {
+  //funcion para manejar la navegación al perfil del usuario de forma segura
+  const BotonPerfil = async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       const userData = await AsyncStorage.getItem('userData');
@@ -981,7 +1011,7 @@ const HomeScreen = () => {
         router.push('/usuario-perfil');
       } else {
         console.log("Navegando a registro (login)");
-        router.push('/registro');
+        router.push('/perfil');
       }
     } catch (error) {
       console.error("Error al verificar autenticación:", error);
@@ -1039,7 +1069,7 @@ const HomeScreen = () => {
           <UserAvatar 
             isAuthenticated={isAuthenticated}
             userData={userData}
-            onPress={handleProfileNavigation}
+            onPress={BotonPerfil}
           />
         </View>
         
@@ -1182,6 +1212,7 @@ const HomeScreen = () => {
               contentContainerStyle={styles.categoriesContainer}
               onScroll={handleCategoriesScroll}
               scrollEventThrottle={16}
+              decelerationRate="fast"
             >
               {infiniteCategories.map((category, index) => (
                 <CategoryItem 
@@ -1237,6 +1268,7 @@ const HomeScreen = () => {
               contentContainerStyle={styles.productsContainer}
               onScroll={handleProductsScroll}
               scrollEventThrottle={16}
+              decelerationRate="fast"
             >
               {infiniteProducts.map((product, index) => (
                 <TouchableOpacity 

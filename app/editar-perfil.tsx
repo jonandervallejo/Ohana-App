@@ -741,9 +741,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   backButton: {
-    padding: 8,
-    borderRadius: 20,
-  },
+  width: 44,
+  height: 44,
+  borderRadius: 22,
+  alignItems: 'center',
+  justifyContent: 'center',
+  backgroundColor: 'transparent',
+},
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',

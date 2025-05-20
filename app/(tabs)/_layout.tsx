@@ -1,14 +1,16 @@
 import { Tabs } from 'expo-router';
-import React, { useRef } from 'react';
-import { Platform, View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import { Platform, View, Text, StyleSheet, Animated } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { HapticTab } from '@/components/HapticTab';
 import { useCart } from '@/app/hooks/useCart';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabLayout() {
   const { cartItems } = useCart();
+  const insets = useSafeAreaInsets();
   
-  //para animacion de escala de íconos
+  // Para animación de escala de iconos
   const scaleAnims = {
     home: useRef(new Animated.Value(1)).current,
     shop: useRef(new Animated.Value(1)).current,
@@ -23,7 +25,7 @@ export default function TabLayout() {
   const secondaryColor = '#9E9E9E';  
   const surfaceColor = '#FFFFFF';    
   
-  //funcion para animar el icono activo en la barra inferior
+  // Función para animar el icono activo
   const animateIcon = (iconKey: keyof typeof scaleAnims) => {
     Object.keys(scaleAnims).forEach(key => {
       Animated.spring(scaleAnims[key as keyof typeof scaleAnims], {
@@ -33,7 +35,6 @@ export default function TabLayout() {
       }).start();
     });
     
-    //se anima el icono con rebote elegante
     Animated.sequence([
       Animated.timing(scaleAnims[iconKey], {
         toValue: 0.8,
@@ -41,13 +42,18 @@ export default function TabLayout() {
         useNativeDriver: true
       }),
       Animated.spring(scaleAnims[iconKey], {
-        toValue: 1.1,  // crece un 10%
+        toValue: 1.1,
         friction: 7,
         tension: 70,
         useNativeDriver: true
       }),
     ]).start();
   };
+  
+  // Cálculo de espacios seguros para la TabBar
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 20 : 10);
+  const tabBarHeight = 55; // Altura base de la TabBar sin padding
+  const totalTabBarHeight = tabBarHeight + bottomInset;
   
   return (
     <Tabs
@@ -57,9 +63,9 @@ export default function TabLayout() {
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
-          height: Platform.OS === 'ios' ? 90 : 70,
-          paddingBottom: Platform.OS === 'ios' ? 25 : 10,
-          paddingTop: 12,
+          height: totalTabBarHeight,
+          paddingBottom: bottomInset,
+          paddingTop: 10,
           backgroundColor: surfaceColor,
           borderTopWidth: 1,
           borderTopColor: '#F5F5F5',
@@ -79,9 +85,16 @@ export default function TabLayout() {
           fontSize: 11,
           fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
           fontWeight: '500',
-          marginTop: 8,
+          marginTop: 4,
+          marginBottom: 2,
           letterSpacing: 0.2,
         },
+        tabBarIconStyle: {
+          marginBottom: 0,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 5,
+        }
       }}
     >
       <Tabs.Screen
@@ -165,56 +178,6 @@ export default function TabLayout() {
           ),
         }}
       />
-      
-      {/*<Tabs.Screen
-        name="notificaciones"
-        listeners={{
-          tabPress: () => animateIcon('bell')
-        }}
-        options={{
-          title: 'Alertas',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={styles.iconWrapper}>
-              <Animated.View style={[
-                styles.iconBackground, 
-                focused && styles.iconFocused,
-                {transform: [{scale: scaleAnims.bell}]}
-              ]}>
-                <MaterialCommunityIcons 
-                  name={focused ? "bell-ring" : "bell-outline"} 
-                  size={24} 
-                  color={focused ? primaryColor : secondaryColor} 
-                />
-              </Animated.View>
-            </View>
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="registro"
-        listeners={{
-          tabPress: () => animateIcon('user')
-        }}
-        options={{
-          title: 'Perfil',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={styles.iconWrapper}>
-              <Animated.View style={[
-                styles.iconBackground, 
-                focused && styles.iconFocused,
-                {transform: [{scale: scaleAnims.user}]}
-              ]}>
-                <MaterialCommunityIcons 
-                  name={focused ? "account" : "account-outline"} 
-                  size={24} 
-                  color={focused ? primaryColor : secondaryColor} 
-                />
-              </Animated.View>
-            </View>
-          ),
-        }}
-      />*/}
     </Tabs>
   );
 }
@@ -224,13 +187,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    width: 48,
-    height: 48,
+    width: 42,
+    height: 42,
   },
   iconBackground: {
-    width: 42, 
-    height: 42,
-    borderRadius: 21,
+    width: 38, 
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',

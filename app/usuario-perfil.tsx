@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,17 +6,19 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  Alert,
+  Modal,
   ActivityIndicator,
   Dimensions,
   Animated,
   Platform,
-  StatusBar
+  StatusBar,
+  TouchableWithoutFeedback
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, Stack } from 'expo-router';
+import { useFavoritos } from './hooks/useFavoritos';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
@@ -31,13 +33,115 @@ interface UserData {
   created_at?: string;
 }
 
+// Componente para el Modal de Cierre de Sesión
+const LogoutModal = ({
+  visible,
+  onClose,
+  onConfirm,
+  userData
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  userData: UserData | null;
+}) => {
+  const modalScaleAnim = useRef(new Animated.Value(0.9)).current;
+  const modalOpacityAnim = useRef(new Animated.Value(0)).current;
+  
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(modalScaleAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(modalOpacityAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(modalScaleAnim, {
+          toValue: 0.9,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(modalOpacityAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible]);
+
+  // Nombre a mostrar en el modal
+  const displayName = userData?.nombre || userData?.email || 'tu cuenta';
+
+  return (
+    <Modal
+      transparent={true}
+      visible={visible}
+      onRequestClose={onClose}
+      animationType="none"
+    >
+      <View style={styles.modalOverlay}>
+        <Animated.View
+          style={[
+            styles.modalContainer,
+            {
+              opacity: modalOpacityAnim,
+              transform: [{ scale: modalScaleAnim }],
+            },
+          ]}
+        >
+          {/* Botón X para cerrar el modal */}
+          <TouchableOpacity 
+            style={styles.modalCloseButton} 
+            onPress={onClose}
+          >
+            <FontAwesome5 name="times" size={20} color="#999" />
+          </TouchableOpacity>
+
+          <View style={styles.modalIconContainer}>
+            <View style={styles.modalIconCircle}>
+              <FontAwesome5 name="sign-out-alt" size={30} color="#FF3B30" />
+            </View>
+          </View>
+
+          <Text style={styles.modalTitle}>Cerrar Sesión</Text>
+
+          <Text style={styles.modalMessage}>
+            ¿Estás seguro que deseas cerrar sesión?
+          </Text>
+
+          {/* Botón único centrado */}
+          <TouchableOpacity
+            style={styles.modalConfirmButton}
+            onPress={onConfirm}
+          >
+            <Text style={styles.modalConfirmButtonText}>Cerrar Sesión</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+};
+
 const UserProfileScreen = () => {
   const router = useRouter();
+  const { cambiarUsuario } = useFavoritos();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const fadeAnim = useState(new Animated.Value(0))[0];
+  
+  // Estado para controlar la visibilidad del modal
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     const getUserData = async () => {
@@ -73,38 +177,34 @@ const UserProfileScreen = () => {
   }, []);
 
   const handleLogout = async () => {
-    Alert.alert(
-      "Cerrar sesión",
-      "¿Estás seguro que deseas cerrar sesión?",
-      [
-        {
-          text: "Cancelar",
-          style: "cancel"
-        },
-        {
-          text: "Sí, cerrar sesión",
-          onPress: async () => {
-            try {
-              setLogoutLoading(true);
-              await AsyncStorage.clear();
-              
-              setTimeout(() => {
-                setLogoutLoading(false);
-                router.push('/perfil');
-              }, 500);
-            } catch (error) {
-              console.error('Error al cerrar sesión:', error);
-              setLogoutLoading(false);
-              Alert.alert(
-                "Error",
-                "No se pudo cerrar sesión. Inténtalo de nuevo."
-              );
-            }
-          }
-        }
-      ]
-    );
-  };
+  try {
+    setLogoutLoading(true);
+    
+    // Obtener el email actual antes de limpiar los datos
+    const userDataStr = await AsyncStorage.getItem('userData');
+    const userData = userDataStr ? JSON.parse(userDataStr) : null;
+    const email = userData?.email || null;
+    
+    // CAMBIAR ESTAS LÍNEAS: Eliminar solo los datos de sesión
+    // await AsyncStorage.clear(); <-- ELIMINAR ESTA LÍNEA
+    
+    // Eliminar solo el token y los datos de usuario
+    await AsyncStorage.removeItem('userToken');
+    await AsyncStorage.removeItem('userData');
+    // Puedes eliminar cualquier otro dato de sesión aquí
+    
+    // Cambiar a favoritos anónimos pero mantener los actuales favoritos
+    await cambiarUsuario('anonymous');
+    
+    setTimeout(() => {
+      setLogoutLoading(false);
+      router.push('/perfil');
+    }, 500);
+  } catch (error) {
+    console.error('Error al cerrar sesión:', error);
+    setLogoutLoading(false);
+  }
+};
 
   // Formatear fecha para mostrarla con formato más amigable
   const formatDate = (dateString?: string) => {
@@ -282,11 +382,11 @@ const UserProfileScreen = () => {
                 </TouchableOpacity>
               </View>
               
-              {/* Botón de cerrar sesión */}
+              {/* Botón de cerrar sesión - MODIFICADO para abrir el modal */}
               <View style={styles.logoutContainer}>
                 <TouchableOpacity 
                   style={styles.logoutButton}
-                  onPress={handleLogout}
+                  onPress={() => setShowLogoutModal(true)}
                   disabled={logoutLoading}
                   activeOpacity={0.8}
                 >
@@ -300,6 +400,14 @@ const UserProfileScreen = () => {
                   )}
                 </TouchableOpacity>
               </View>
+              
+              {/* Modal de cierre de sesión */}
+              <LogoutModal
+                visible={showLogoutModal}
+                onClose={() => setShowLogoutModal(false)}
+                onConfirm={handleLogout}
+                userData={userData}
+              />
               
               {/* Versión de la app */}
               <View style={styles.versionContainer}>
@@ -339,9 +447,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   backButton: {
-    padding: 8,
-    borderRadius: 20,
-  },
+  width: 44,
+  height: 44,
+  borderRadius: 22,
+  alignItems: 'center',
+  justifyContent: 'center',
+  backgroundColor: 'transparent',
+},
   scrollView: {
     flex: 1,
   },
@@ -588,7 +700,102 @@ const styles = StyleSheet.create({
   versionText: {
     color: '#999',
     fontSize: 14,
-  }
+  },
+  
+  // Estilos para el modal de cierre de sesión
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    position: 'relative',
+    width: width * 0.85,
+    backgroundColor: 'white',
+    borderRadius: 20,
+    paddingTop: 25,
+    paddingBottom: 20,
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f2f2f2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  modalIconContainer: {
+    marginTop: 10,
+    marginBottom: 15,
+  },
+  modalIconCircle: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'rgba(255, 59, 48, 0.1)', // Color rojo para cerrar sesión
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 30,
+    paddingHorizontal: 20,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  modalHighlight: {
+    fontWeight: '700',
+    color: '#000',
+  },
+  modalConfirmButton: {
+    width: '70%', // Ancho reducido para centrarlo
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF3B30', // Color rojo para cerrar sesión
+    borderRadius: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  modalConfirmButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });
 
 export default UserProfileScreen;

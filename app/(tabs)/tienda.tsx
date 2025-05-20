@@ -15,7 +15,8 @@ import {
   Alert,
   Keyboard,
   Animated,
-  Easing
+  Easing,
+  StatusBar
 } from 'react-native';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -24,6 +25,60 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFavoritos } from '../hooks/useFavoritos';
 import { useCart } from '../hooks/useCart';
+
+// Variable global para forzar recreación del componente
+let RESET_COUNTER = 0;
+
+// Componente Wrapper que fuerza recreación completa
+const TiendaWrapper = () => {
+  // Usar una key única para forzar recreación completa del componente
+  const [componentKey, setComponentKey] = useState(0);
+  const router = useRouter();
+
+  // UseEffect que se ejecuta cada vez que la pantalla recibe el foco
+ useFocusEffect(
+  React.useCallback(() => {
+    console.log('🔄 FORZANDO RECREACIÓN COMPLETA DEL COMPONENTE DE TIENDA');
+
+    RESET_COUNTER++;
+    setComponentKey(prev => prev + 1);
+
+    const cleanStorage = async () => {
+      try {
+        await AsyncStorage.removeItem('lastSelectedCategory');
+
+        const keys = await AsyncStorage.getAllKeys();
+        const filterKeys = keys.filter(key => 
+          key.includes('filter') || 
+          key.includes('category') ||
+          key.includes('gender') ||
+          key.includes('tienda')
+        );
+
+        if (filterKeys.length > 0) {
+          await AsyncStorage.multiRemove(filterKeys);
+          console.log('🧹 Limpieza de AsyncStorage: eliminadas', filterKeys.length, 'claves');
+        }
+
+        // ✅ Redirigir a /tienda sin parámetros (importante)
+        router.replace('/tienda');
+        
+      } catch (error) {
+        console.error('Error en limpieza radical de AsyncStorage:', error);
+      }
+    };
+
+    cleanStorage();
+
+    return () => {};
+  }, [])
+);
+
+
+  // Renderizamos el componente real con una key única
+  // Esto garantiza que React lo recreará COMPLETAMENTE cada vez
+  return <TiendaScreen key={`tienda-${componentKey}-${RESET_COUNTER}`} />;
+};
 
 type Gender = 'hombre' | 'mujer' | null;
 
@@ -107,7 +162,8 @@ const normalizeImageUrl = (imageUrl: string): string => {
   }
 };
 
-export default function TiendaScreen() {
+// El componente principal ahora es interno
+function TiendaScreen() {
   const params = useLocalSearchParams();
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [selectedCategoryName, setSelectedCategoryName] = useState<string | null>(null);
@@ -117,8 +173,6 @@ export default function TiendaScreen() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [hasMoreProducts, setHasMoreProducts] = useState(true);
   const [displayedProducts, setDisplayedProducts] = useState<Product[]>([]);
   const [selectedFilters, setSelectedFilters] = useState({
     priceRange: { min: '', max: '' },
@@ -135,6 +189,7 @@ export default function TiendaScreen() {
   const [isChangingCategory, setIsChangingCategory] = useState(false);
   const [paramsProcessed, setParamsProcessed] = useState(false);
   const [networkError, setNetworkError] = useState<string | null>(null);
+  const [forceCategoryRefresh, setForceCategoryRefresh] = useState(0);
   
   // Estados para el toast personalizado
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -152,6 +207,16 @@ export default function TiendaScreen() {
   const { addToCart, refreshLoginStatus } = useCart();
 
   const availableSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  const themeColors = {
+    background: theme === 'light' ? '#fff' : '#181818',
+    text: theme === 'light' ? '#000' : '#fff',
+    card: theme === 'light' ? '#fff' : '#232323',
+    añadir: theme == 'light' ? '#fff' : '#fff',
+    // ...otros colores que quieras cambiar
+  };
 
   // Animación del spinner elegante y minimalista
   useEffect(() => {
@@ -224,6 +289,26 @@ export default function TiendaScreen() {
     }
   };
 
+  // Cargar datos iniciales
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('Componente Tienda recreado completamente - Cargando datos iniciales');
+      
+      // Cargar datos básicos
+      setTimeout(() => {
+        checkLoginStatus();
+        fetchCategories();
+      }, 50);
+      
+      return () => {
+        if (toastTimeout.current) {
+          clearTimeout(toastTimeout.current);
+        }
+        ImageCache.reset();
+      };
+    }, [])
+  );
+
   // Función para manejar favoritos que usa el hook personalizado
   const handleToggleFavorite = async (productId: number) => {
     try {
@@ -254,9 +339,9 @@ export default function TiendaScreen() {
       const isFav = await esFavorito(productId);
       
       if (isFav) {
-        showToast('Añadido a favoritos', 'success', 'heart');
+        showToast('Eliminado de favoritos ', 'info', 'heart');
       } else {
-        showToast('Eliminado de favoritos', 'info', 'heart-outline');
+        showToast('Añadido a favoritos', 'success', 'heart-outline');
       }
       
     } catch (error) {
@@ -299,47 +384,50 @@ export default function TiendaScreen() {
     }
   };
 
-  // Resetear estado cuando se sale de la página
-  useFocusEffect(
-    React.useCallback(() => {
-      // Reset de estados
-      setSelectedGender(null);
-      setShowFilters(false);
-      setProducts([]);
-      setLoading(true);
-      setSearchQuery('');
-      setAllProducts([]);
-      setFilteredProducts([]);
-      setDisplayedProducts([]);
-      setSelectedFilters({
-        priceRange: { min: '', max: '' },
-        sizes: [],
-        categories: [],
-      });
-      setExpandedFilter(null);
-      setParamsProcessed(false);
-      
-      return () => {
-        // Limpiar al salir de la pantalla
-        if (toastTimeout.current) {
-          clearTimeout(toastTimeout.current);
-        }
-        // Limpiar caché de imágenes
-        ImageCache.reset();
-      };
-    }, [])
-  );
-
-  useEffect(() => {
-    // Cargar el estado de login al iniciar
-    checkLoginStatus();
-    // Cargar las categorías al iniciar
-    fetchCategories();
+  // Resetear completamente todos los estados
+  const resetAllStates = useCallback(() => {
+    setSelectedCategoryId(null);
+    setSelectedCategoryName(null);
+    setSelectedGender(null);
+    setShowFilters(false);
+    setProducts([]);
+    setLoading(true);
+    setSearchQuery('');
+    setAllProducts([]);
+    setFilteredProducts([]);
+    setDisplayedProducts([]);
+    setSelectedFilters({
+      priceRange: { min: '', max: '' },
+      sizes: [],
+      categories: [],
+    });
+    setExpandedFilter(null);
+    setParamsProcessed(false); // Importante para procesar nuevos parámetros
+    setForceCategoryRefresh(prev => prev + 1); // Forzar refresco de categorías
+    
+    // IMPORTANTE: En lugar de guardar estado vacío, mejor eliminar la clave completamente
+    try {
+      AsyncStorage.removeItem('lastSelectedCategory');
+    } catch (error) {
+      console.error('Error eliminando categoría de AsyncStorage:', error);
+    }
   }, []);
 
-  // Procesar parámetros de URL una sola vez
+  // Procesar parámetros de URL una sola vez cuando se reciben - MEJORADO
   useEffect(() => {
-    if (paramsProcessed) return;
+    // Si ya se procesaron o no hay parámetros válidos, no hacer nada
+    if (paramsProcessed || !params || Object.keys(params).length === 0) return;
+    
+    console.log('Procesando parámetros de URL:', params);
+    
+    // Verificar si venimos de una navegación directa (con intención explícita)
+    // Solo procesar si tenemos categoryId o categoryName específicamente pasados
+    const hasValidParams = params.categoryId || params.categoryName;
+    
+    if (!hasValidParams) {
+      setParamsProcessed(true);
+      return;
+    }
     
     try {
       if (params.categoryId) {
@@ -351,6 +439,7 @@ export default function TiendaScreen() {
             : null;
         
         if (categoryId && !isNaN(categoryId)) {
+          console.log(`Estableciendo categoryId: ${categoryId}`);
           setSelectedCategoryId(categoryId);
         }
       }
@@ -364,6 +453,7 @@ export default function TiendaScreen() {
             : '';
         
         if (categoryName) {
+          console.log(`Estableciendo categoryName: ${categoryName}`);
           setSelectedCategoryName(categoryName);
           
           // Actualizar filtros sólo si tenemos un nombre válido
@@ -376,11 +466,23 @@ export default function TiendaScreen() {
           setExpandedFilter('Categoría');
         }
       }
+
+      // Si tenemos un searchQuery en los parámetros
+      if (params.searchQuery) {
+        const query = typeof params.searchQuery === 'string'
+          ? params.searchQuery
+          : Array.isArray(params.searchQuery)
+            ? params.searchQuery[0]
+            : '';
+            
+        if (query) {
+          console.log(`Estableciendo searchQuery: ${query}`);
+          setSearchQuery(query);
+        }
+      }
     } catch (error) {
-      // Manejar cualquier error silenciosamente
       console.error('Error processing URL parameters:', error);
     } finally {
-      // Marcar como procesado en todos los casos
       setParamsProcessed(true);
     }
   }, [params, paramsProcessed]);
@@ -433,7 +535,7 @@ export default function TiendaScreen() {
       // Cargar productos del género seleccionado
       try {
         const genderResponse = await axios.get(
-          `${API_BASE_URL}/api/productos/genero/${selectedGender}`, 
+          `${API_BASE_URL}/api/productos/genero/${selectedGender}?per_page=all`, 
           axiosConfig
         );
         
@@ -450,7 +552,7 @@ export default function TiendaScreen() {
       // Cargar productos unisex (opcional, continuar aunque falle)
       try {
         const unisexResponse = await axios.get(
-          `${API_BASE_URL}/api/productos/genero/unisex`, 
+          `${API_BASE_URL}/api/productos/genero/unisex?per_page=all`, 
           axiosConfig
         );
         
@@ -533,6 +635,7 @@ export default function TiendaScreen() {
     }
   };
 
+  // Aplicar filtros en base a los criterios seleccionados
   const applyFilters = useCallback(() => {
     if (!allProducts.length || isChangingCategory) return;
     
@@ -617,6 +720,13 @@ export default function TiendaScreen() {
         if (selectedCategoryName === category) {
           setSelectedCategoryName(null);
           setSelectedCategoryId(null);
+          
+          // También limpiar en AsyncStorage
+          try {
+            AsyncStorage.removeItem('lastSelectedCategory');
+          } catch (error) {
+            console.error('Error limpiando categoría en AsyncStorage:', error);
+          }
         }
         
         return {
@@ -642,22 +752,37 @@ export default function TiendaScreen() {
     setIsChangingCategory(false);
   };
 
+  // Función mejorada para limpiar todos los filtros
   const clearFilters = () => {
     setIsChangingCategory(true);
     
+    // Resetear filtros
     setSelectedFilters({
       priceRange: { min: '', max: '' },
       sizes: [],
       categories: [],
     });
+    
+    // Limpiar búsqueda
     setSearchQuery('');
+    
+    // Es crítico limpiar estos estados
     setSelectedCategoryId(null);
     setSelectedCategoryName(null);
     
-    // Resetear a todos los productos
-    setFilteredProducts(allProducts);
-    setDisplayedProducts(allProducts);
+    // Eliminar completamente en AsyncStorage en lugar de guardar null
+    try {
+      AsyncStorage.removeItem('lastSelectedCategory');
+    } catch (error) {
+      console.error('Error eliminando categoría de AsyncStorage:', error);
+    }
     
+    // Resetear a todos los productos
+    if (allProducts.length > 0) {
+      setFilteredProducts(allProducts);
+      setDisplayedProducts(allProducts);
+    }
+        
     setIsChangingCategory(false);
   };
 
@@ -668,11 +793,13 @@ export default function TiendaScreen() {
     }));
   };
 
+  // Cargar categorías
   const fetchCategories = async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/categorias`);
       if (response.data) {
         setCategories(response.data);
+        console.log(`Cargadas ${response.data.length} categorías`);
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -683,6 +810,14 @@ export default function TiendaScreen() {
 
   const toggleFilter = (filterName: string) => {
     setExpandedFilter(expandedFilter === filterName ? null : filterName);
+  };
+
+  // Volver a la selección de género (resetea todos los filtros)
+  const handleBackToGenderSelection = () => {
+    // Limpiamos todos los filtros y estados
+    clearFilters();
+    // Volvemos a la selección de género
+    setSelectedGender(null);
   };
 
   // Componente Toast personalizado
@@ -847,7 +982,7 @@ export default function TiendaScreen() {
           <View style={styles.chipsContainer}>
             {categories.map((category) => (
               <TouchableOpacity
-                key={category.id}
+                key={`cat-${category.id}-${forceCategoryRefresh}`}
                 style={[
                   styles.chip,
                   selectedFilters.categories.includes(category.nombre_cat) && styles.chipSelected,
@@ -892,7 +1027,7 @@ export default function TiendaScreen() {
     const imageUrl = normalizeImageUrl(item.imagen);
 
     return (
-      <View style={styles.productCard}>
+      <View style={[styles.productCard, { backgroundColor: themeColors.card }]}>
         <TouchableOpacity 
           style={styles.productImageContainer}
           onPress={() => {
@@ -924,14 +1059,14 @@ export default function TiendaScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
         <View style={styles.productInfo}>
-          <Text style={styles.productName} numberOfLines={2}>{item.nombre}</Text>
-          <Text style={styles.productPrice}>{item.precio} €</Text>
+          <Text style={[styles.productName, { color: themeColors.text }]} numberOfLines={2}>{item.nombre}</Text>
+          <Text style={[styles.productPrice, { color: themeColors.text }]}>{item.precio} €</Text>
           <TouchableOpacity 
             style={styles.addToCartButton}
             onPress={() => handleAddToCart(item)}
           >
             <FontAwesome5 name="shopping-cart" size={16} color="#fff" />
-            <Text style={styles.addToCartText}>Añadir</Text>
+            <Text style={[styles.addToCartText, { color: themeColors.añadir }]}>Añadir</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -942,20 +1077,30 @@ export default function TiendaScreen() {
     <View style={styles.header}>
       <TouchableOpacity 
         style={styles.backButton}
-        onPress={() => setSelectedGender(null)}
+        onPress={handleBackToGenderSelection}
       >
         <FontAwesome5 name="arrow-left" size={18} color="#333" />
       </TouchableOpacity>
-      <Text style={styles.sectionTitle}>
+      <Text style={[styles.sectionTitle, { color: themeColors.text }]}>
         {selectedCategoryName 
           ? `${selectedCategoryName} ${selectedGender === 'hombre' ? 'Hombre' : 'Mujer'}` 
           : selectedGender === 'hombre' ? 'Colección Hombre' : 'Colección Mujer'}
       </Text>
       <TouchableOpacity 
-        style={styles.filterButton}
+        style={[styles.filterButton, showFilters && styles.filterButtonActive]}
         onPress={() => setShowFilters(!showFilters)}
       >
-        <FontAwesome5 name="filter" size={20} color="#333" />
+        <FontAwesome5 name="filter" size={20} color={showFilters ? "#007bff" : "#333"} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.filterButton, { marginLeft: 10 }]}
+        onPress={toggleTheme}
+      >
+        <FontAwesome5 
+          name={theme === 'light' ? "moon" : "sun"} 
+          size={20} 
+          color={theme === 'light' ? "#333" : "#FFD700"} 
+        />
       </TouchableOpacity>
     </View>
   );
@@ -971,10 +1116,18 @@ export default function TiendaScreen() {
     }, 100); // Pequeño delay para UX
   };
 
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+      <StatusBar
+        barStyle={theme === 'light' ? 'dark-content' : 'light-content'}
+        backgroundColor={themeColors.background}
+      />
       <LinearGradient
-        colors={['#ffffff', '#f8f8f8']}
+        colors={theme === 'light' ? ['#ffffff', '#f8f8f8'] : ['#232526', '#1c1c1c']}
         style={styles.gradientBackground}
       >
         {/* Toast personalizado */}
@@ -1030,6 +1183,7 @@ export default function TiendaScreen() {
                   style={styles.clearSearchButton}
                   onPress={() => {
                     setSearchQuery('');
+                    applyFilters();
                   }}
                 >
                   <FontAwesome5 name="times" size={16} color="#666" />
@@ -1050,7 +1204,7 @@ export default function TiendaScreen() {
               <FlatList
                 data={filteredProducts}
                 renderItem={renderProduct}
-                keyExtractor={(item) => item.id.toString()}
+                keyExtractor={(item) => `product-${item.id}-${forceCategoryRefresh}`}
                 numColumns={2}
                 contentContainerStyle={styles.productsList}
                 showsVerticalScrollIndicator={false}
@@ -1139,6 +1293,11 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: '#f5f5f5',
     borderRadius: 20,
+  },
+  filterButtonActive: {
+    backgroundColor: '#e6f2ff',
+    borderWidth: 1,
+    borderColor: '#007bff',
   },
   filtersContainer: {
     padding: 20,
@@ -1269,14 +1428,15 @@ const styles = StyleSheet.create({
   },
   filterButtonsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     marginTop: 15,
   },
   clearFiltersButton: {
     backgroundColor: '#f5f5f5',
     borderWidth: 1,
     borderColor: '#ddd',
-    padding: 10,
+    padding: 12,
+    paddingHorizontal: 24,
     borderRadius: 20,
   },
   clearFiltersText: {
@@ -1514,7 +1674,6 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
   },
-  // Estilos para el error de red
   networkErrorContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1554,3 +1713,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
 });
+
+// Exportar el wrapper en lugar del componente principal
+export default TiendaWrapper;
