@@ -1,14 +1,41 @@
 import { Tabs } from 'expo-router';
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Platform, View, Text, StyleSheet, Animated } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { HapticTab } from '@/components/HapticTab';
 import { useCart } from '@/app/hooks/useCart';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useColorScheme } from '@/app/hooks/useColorScheme';
+import { useFocusEffect } from '@react-navigation/native';
+
+// Función para obtener colores según el tema
+const getColors = (isDark: boolean) => ({
+  primary: isDark ? '#FFFFFF' : '#101010',
+  secondary: isDark ? '#888888' : '#9E9E9E',
+  surface: isDark ? '#121212' : '#FFFFFF',
+  tabBarBorder: isDark ? '#2c2c2c' : '#F5F5F5',
+  iconBackground: isDark ? '#1e1e1e' : '#FAF7F4',
+  iconBorder: isDark ? '#333333' : '#CAAB8F20',
+  iconShadow: isDark ? '#000000' : '#CAAB8F',
+  badge: '#E06C75',
+  badgeBorder: isDark ? '#121212' : '#FFFFFF',
+  badgeText: '#FFFFFF',
+});
 
 export default function TabLayout() {
   const { cartItems } = useCart();
   const insets = useSafeAreaInsets();
+
+  // Usar el hook de colorScheme con estado local para asegurar actualizaciones
+  const { colorScheme } = useColorScheme();
+  const [isDarkMode, setIsDarkMode] = useState(colorScheme === 'dark');
+  const [colors, setColors] = useState(getColors(colorScheme === 'dark'));
+  
+  // Actualizar colores cuando cambia el tema
+  useEffect(() => {
+    setIsDarkMode(colorScheme === 'dark');
+    setColors(getColors(colorScheme === 'dark'));
+  }, [colorScheme]);
   
   // Para animación de escala de iconos
   const scaleAnims = {
@@ -20,10 +47,6 @@ export default function TabLayout() {
   };
   
   const cartItemCount = cartItems.reduce((total, item) => total + item.cantidad, 0);
-  
-  const primaryColor = '#101010';    
-  const secondaryColor = '#9E9E9E';  
-  const surfaceColor = '#FFFFFF';    
   
   // Función para animar el icono activo
   const animateIcon = (iconKey: keyof typeof scaleAnims) => {
@@ -58,22 +81,22 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: primaryColor,
-        tabBarInactiveTintColor: secondaryColor,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.secondary,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
           height: totalTabBarHeight,
           paddingBottom: bottomInset,
           paddingTop: 10,
-          backgroundColor: surfaceColor,
+          backgroundColor: colors.surface,
           borderTopWidth: 1,
-          borderTopColor: '#F5F5F5',
+          borderTopColor: colors.tabBarBorder,
           ...Platform.select({
             ios: {
-              shadowColor: '#000',
+              shadowColor: isDarkMode ? '#000' : '#000',
               shadowOffset: { width: 0, height: -2 },
-              shadowOpacity: 0.06,
+              shadowOpacity: isDarkMode ? 0.3 : 0.06,
               shadowRadius: 5,
             },
             android: {
@@ -108,13 +131,19 @@ export default function TabLayout() {
             <View style={styles.iconWrapper}>
               <Animated.View style={[
                 styles.iconBackground, 
-                focused && styles.iconFocused,
-                {transform: [{scale: scaleAnims.home}]}
+                focused && [
+                  styles.iconFocused,
+                  { 
+                    backgroundColor: colors.iconBackground,
+                    borderColor: colors.iconBorder 
+                  }
+                ],
+                { transform: [{scale: scaleAnims.home}] }
               ]}>
                 <MaterialCommunityIcons 
                   name={focused ? "home" : "home-outline"} 
                   size={24} 
-                  color={focused ? primaryColor : secondaryColor} 
+                  color={focused ? colors.primary : colors.secondary} 
                 />
               </Animated.View>
             </View>
@@ -133,13 +162,19 @@ export default function TabLayout() {
             <View style={styles.iconWrapper}>
               <Animated.View style={[
                 styles.iconBackground, 
-                focused && styles.iconFocused,
-                {transform: [{scale: scaleAnims.shop}]}
+                focused && [
+                  styles.iconFocused,
+                  { 
+                    backgroundColor: colors.iconBackground,
+                    borderColor: colors.iconBorder 
+                  }
+                ],
+                { transform: [{scale: scaleAnims.shop}] }
               ]}>
                 <MaterialCommunityIcons 
                   name="hanger" 
                   size={24} 
-                  color={focused ? primaryColor : secondaryColor} 
+                  color={focused ? colors.primary : colors.secondary} 
                 />
               </Animated.View>
             </View>
@@ -158,16 +193,22 @@ export default function TabLayout() {
             <View style={styles.iconWrapper}>
               <Animated.View style={[
                 styles.iconBackground, 
-                focused && styles.iconFocused,
-                {transform: [{scale: scaleAnims.cart}]}
+                focused && [
+                  styles.iconFocused,
+                  { 
+                    backgroundColor: colors.iconBackground,
+                    borderColor: colors.iconBorder 
+                  }
+                ],
+                { transform: [{scale: scaleAnims.cart}] }
               ]}>
                 <MaterialCommunityIcons 
                   name={focused ? "shopping" : "shopping-outline"} 
                   size={24} 
-                  color={focused ? primaryColor : secondaryColor} 
+                  color={focused ? colors.primary : colors.secondary} 
                 />
                 {cartItemCount > 0 && (
-                  <View style={styles.badge}>
+                  <View style={[styles.badge, { borderColor: colors.badgeBorder }]}>
                     <Text style={styles.badgeText}>
                       {cartItemCount > 99 ? '99+' : cartItemCount}
                     </Text>
@@ -199,12 +240,10 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   iconFocused: {
-    backgroundColor: '#FAF7F4',
     borderWidth: 1,
-    borderColor: '#CAAB8F20',
     ...Platform.select({
       ios: {
-        shadowColor: '#CAAB8F',
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 4,
@@ -227,7 +266,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     zIndex: 10,
     borderWidth: 1.5,
-    borderColor: '#FFFFFF',
   },
   badgeText: {
     color: 'white',

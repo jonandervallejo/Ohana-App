@@ -12,22 +12,52 @@ import {
   Animated,
   Platform,
   Modal,
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  StatusBar
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, Stack } from 'expo-router';
 import axios from 'axios';
-import { useFavoritos } from './hooks/useFavoritos'; // Importar el hook compartido
-import { useCart } from './hooks/useCart'; // Importar el hook de carrito
+import { useFavoritos } from './hooks/useFavoritos';
+import { useCart } from './hooks/useCart';
 import { useFocusEffect } from '@react-navigation/native';
-
+import { useColorScheme } from './hooks/useColorScheme';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 45) / 2; // Dos columnas con padding
 const API_BASE_URL = 'https://ohanatienda.ddns.net';
 const DEFAULT_IMAGE = require('@/assets/images/camiseta1.jpg');
+
+// Función para obtener colores según el tema
+const getColors = (isDark: boolean) => ({
+  background: isDark ? '#121212' : '#ffffff',
+  secondaryBackground: isDark ? '#1e1e1e' : '#f8f8f8',
+  text: isDark ? '#ffffff' : '#000000',
+  secondaryText: isDark ? '#b0b0b0' : '#666666',
+  border: isDark ? '#2c2c2c' : '#eeeeee',
+  card: isDark ? '#1e1e1e' : '#ffffff',
+  cardBorder: isDark ? '#2c2c2c' : 'transparent',
+  subtle: isDark ? '#2c2c2c' : '#f5f5f5',
+  button: isDark ? '#2c2c2c' : '#000000',
+  buttonText: isDark ? '#ffffff' : '#ffffff',
+  error: isDark ? '#ff6b6b' : '#ff3b30',
+  modalBackground: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)',
+  loadingIndicator: isDark ? '#ffffff' : '#000000',
+  separator: isDark ? '#383838' : '#f0f0f0',
+  emptyGradient: isDark ? ['rgba(255,255,255,0.03)', 'rgba(255,255,255,0.07)'] : ['rgba(0,0,0,0.03)', 'rgba(0,0,0,0.07)'],
+  emptyIcon: isDark ? '#444' : '#ccc',
+  emptyTitle: isDark ? '#f0f0f0' : '#333',
+  emptyText: isDark ? '#aaaaaa' : '#666',
+  modalCard: isDark ? '#1e1e1e' : '#ffffff',
+  modalTitleText: isDark ? '#ffffff' : '#000000',
+  modalMessageText: isDark ? '#b0b0b0' : '#666666',
+  modalCancelButton: isDark ? '#2c2c2c' : '#f2f2f2',
+  modalCancelButtonText: isDark ? '#ffffff' : '#666666',
+  categoryBadge: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.6)',
+  actionSeparator: isDark ? '#2c2c2c' : '#f0f0f0'
+});
 
 // Interfaz para los Toasts personalizados
 interface ToastMessage {
@@ -88,24 +118,27 @@ const normalizeImageUrl = (imageUrl: string): string => {
   }
 };
 
-// Componente mejorado para imágenes con fallback
+// Componente mejorado para imágenes con fallback - con soporte para tema
 const SafeImage = ({ 
   source, 
   fallbackSource = DEFAULT_IMAGE,
   style,
   resizeMode = "cover",
   onError,
-  imageKey
+  imageKey,
+  isDarkMode
 }: { 
   source: any, 
   fallbackSource?: any,
   style: any,
   resizeMode?: "cover" | "contain" | "stretch" | "repeat" | "center",
   onError?: () => void,
-  imageKey?: string | number
+  imageKey?: string | number,
+  isDarkMode: boolean
 }) => {
   const [hasError, setHasError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const colors = getColors(isDarkMode);
   
   const isRemoteSource = source && typeof source === 'object' && source.uri;
   const sourceUri = isRemoteSource ? source.uri : null;
@@ -164,7 +197,7 @@ const SafeImage = ({
         <ActivityIndicator 
           style={{position: 'absolute', left: 0, right: 0, top: 0, bottom: 0}}
           size="small" 
-          color="#000"
+          color={colors.loadingIndicator}
         />
       )}
     </View>
@@ -185,7 +218,6 @@ interface FavoriteItem {
 }
 
 // Componente independiente para el elemento favorito
-// Así los hooks se usan correctamente dentro de un componente funcional
 const FavoriteItemCard = ({
   item,
   index,
@@ -193,7 +225,8 @@ const FavoriteItemCard = ({
   handleRemoveFavorite,
   removingIds,
   formatPrice,
-  handleAddToCart
+  handleAddToCart,
+  isDarkMode
 }: {
   item: FavoriteItem;
   index: number;
@@ -202,10 +235,12 @@ const FavoriteItemCard = ({
   removingIds: Set<number>;
   formatPrice: (price: string) => string;
   handleAddToCart: (item: FavoriteItem) => void;
+  isDarkMode: boolean;
 }) => {
   const itemAnimDelay = index * 100;
   const itemFadeAnim = useRef(new Animated.Value(0)).current;
   const itemTranslateAnim = useRef(new Animated.Value(20)).current;
+  const colors = getColors(isDarkMode);
   
   useEffect(() => {
     Animated.parallel([
@@ -234,7 +269,14 @@ const FavoriteItemCard = ({
         }
       ]}
     >
-      <View style={styles.favoriteCard}>
+      <View style={[
+        styles.favoriteCard, 
+        { 
+          backgroundColor: colors.card,
+          borderColor: colors.cardBorder,
+          borderWidth: isDarkMode ? 1 : 0
+        }
+      ]}>
         <TouchableOpacity 
           style={styles.imageContainer}
           activeOpacity={0.9}
@@ -245,11 +287,12 @@ const FavoriteItemCard = ({
             style={styles.productImage}
             imageKey={`favorite-${item.id}`}
             resizeMode="cover"
+            isDarkMode={isDarkMode}
           />
           
           {/* Badge de categoría flotante */}
           {item.categoria && (
-            <View style={styles.categoryBadge}>
+            <View style={[styles.categoryBadge, { backgroundColor: colors.categoryBadge }]}>
               <Text style={styles.categoryText} numberOfLines={1}>
                 {item.categoria.nombre_cat}
               </Text>
@@ -274,30 +317,30 @@ const FavoriteItemCard = ({
         </TouchableOpacity>
         
         <View style={styles.productInfo}>
-          <Text style={styles.productName} numberOfLines={1}>
+          <Text style={[styles.productName, { color: colors.text }]} numberOfLines={1}>
             {item.nombre}
           </Text>
-          <Text style={styles.productPrice}>
+          <Text style={[styles.productPrice, { color: colors.text }]}>
             {formatPrice(item.precio)}
           </Text>
           
           <View style={styles.productActions}>
             <TouchableOpacity 
-              style={styles.viewDetailsButton}
+              style={[styles.viewDetailsButton, { borderTopColor: colors.actionSeparator }]}
               onPress={() => handleProductPress(item.id)}
               activeOpacity={0.7}
             >
-              <Text style={styles.viewDetailsText}>Ver detalles</Text>
-              <Ionicons name="chevron-forward" size={16} color="#000" />
+              <Text style={[styles.viewDetailsText, { color: colors.text }]}>Ver detalles</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.text} />
             </TouchableOpacity>
             
             {/* Botón de añadir al carrito */}
             <TouchableOpacity
-              style={styles.addToCartButton}
+              style={[styles.addToCartButton, { backgroundColor: colors.button }]}
               onPress={() => handleAddToCart(item)}
             >
-              <Ionicons name="cart-outline" size={18} color="#fff" />
-              <Text style={styles.addToCartText}>Añadir</Text>
+              <Ionicons name="cart-outline" size={18} color={colors.buttonText} />
+              <Text style={[styles.addToCartText, { color: colors.buttonText }]}>Añadir</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -308,6 +351,10 @@ const FavoriteItemCard = ({
 
 const FavoritosScreen = () => {
   const router = useRouter();
+  const { colorScheme, toggleColorScheme } = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const colors = getColors(isDarkMode);
+
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -591,23 +638,25 @@ const FavoritosScreen = () => {
     return (
       <View style={styles.emptyContainer}>
         <LinearGradient
-          colors={['rgba(0,0,0,0.03)', 'rgba(0,0,0,0.07)']}
+          colors={colors.emptyGradient as [string, string]}
           style={styles.emptyGradient}
         >
-          <FontAwesome5 name="heart-broken" size={60} color="#ccc" />
-          <Text style={styles.emptyTitle}>Sin favoritos</Text>
-          <Text style={styles.emptyText}>
+          <FontAwesome5 name="heart-broken" size={60} color={colors.emptyIcon} />
+          <Text style={[styles.emptyTitle, { color: colors.emptyTitle }]}>Sin favoritos</Text>
+          <Text style={[styles.emptyText, { color: colors.emptyText }]}>
             No tienes productos guardados en favoritos todavía
           </Text>
           <TouchableOpacity
-            style={styles.exploreButton}
+            style={[styles.exploreButton, { backgroundColor: colors.button }]}
             onPress={() => {
               router.push('/(tabs)/tienda');
               showToast('Exploremos algunos productos', 'info', 'search');
             }}
             activeOpacity={0.7}
           >
-            <Text style={styles.exploreButtonText}>Explorar productos</Text>
+            <Text style={[styles.exploreButtonText, { color: colors.buttonText }]}>
+              Explorar productos
+            </Text>
           </TouchableOpacity>
         </LinearGradient>
       </View>
@@ -656,7 +705,7 @@ const FavoritosScreen = () => {
     );
   };
 
-  // Renderizar el modal de confirmación personalizado
+  // Renderizar el modal de confirmación personalizado con soporte para tema oscuro
   const renderConfirmationModal = () => {
     return (
       <Modal
@@ -666,14 +715,15 @@ const FavoritosScreen = () => {
         animationType="fade"
       >
         <TouchableWithoutFeedback onPress={hideConfirmationModal}>
-          <View style={styles.modalOverlay}>
+          <View style={[styles.modalOverlay, { backgroundColor: colors.modalBackground }]}>
             <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
               <Animated.View 
                 style={[
                   styles.modalContainer,
                   {
                     opacity: modalOpacityAnim,
-                    transform: [{ scale: modalScaleAnim }]
+                    transform: [{ scale: modalScaleAnim }],
+                    backgroundColor: colors.modalCard
                   }
                 ]}
               >
@@ -683,20 +733,26 @@ const FavoritosScreen = () => {
                   </View>
                 </View>
                 
-                <Text style={styles.modalTitle}>Eliminar de favoritos</Text>
+                <Text style={[styles.modalTitle, { color: colors.modalTitleText }]}>
+                  Eliminar de favoritos
+                </Text>
                 
-                <Text style={styles.modalMessage}>
+                <Text style={[styles.modalMessage, { color: colors.modalMessageText }]}>
                   ¿Estás seguro que deseas eliminar{"\n"}
-                  <Text style={styles.modalProductName}>{confirmModal.productName}</Text>{"\n"}
+                  <Text style={[styles.modalProductName, { color: colors.text }]}>
+                    {confirmModal.productName}
+                  </Text>{"\n"}
                   de tus favoritos?
                 </Text>
                 
-                <View style={styles.modalButtonsContainer}>
+                <View style={[styles.modalButtonsContainer, { borderTopColor: colors.border }]}>
                   <TouchableOpacity 
-                    style={[styles.modalButton, styles.modalCancelButton]}
+                    style={[styles.modalButton, styles.modalCancelButton, 
+                      { backgroundColor: colors.modalCancelButton }]}
                     onPress={hideConfirmationModal}
                   >
-                    <Text style={styles.modalCancelButtonText}>Cancelar</Text>
+                    <Text style={[styles.modalCancelButtonText, 
+                      { color: colors.modalCancelButtonText }]}>Cancelar</Text>
                   </TouchableOpacity>
                   
                   <TouchableOpacity 
@@ -714,7 +770,7 @@ const FavoritosScreen = () => {
     );
   };
 
-  // Ahora usamos el componente FavoriteItemCard en lugar de la función inline
+  // Ahora el componente FavoriteItemCard recibe el tema
   const renderFavoriteItem = ({ item, index }: { item: FavoriteItem, index: number }) => (
     <FavoriteItemCard
       item={item}
@@ -724,11 +780,13 @@ const FavoritosScreen = () => {
       removingIds={removingIds}
       formatPrice={formatPrice}
       handleAddToCart={handleAddToCart}
+      isDarkMode={isDarkMode}
     />
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       <Stack.Screen
         options={{
           headerShown: false,
@@ -736,7 +794,7 @@ const FavoritosScreen = () => {
       />
       
       <LinearGradient
-        colors={['#f8f8f8', '#ffffff']}
+        colors={[colors.secondaryBackground, colors.background]}
         style={styles.gradientBackground}
       >
         {/* Renderizar el toast personalizado */}
@@ -746,15 +804,18 @@ const FavoritosScreen = () => {
         {renderConfirmationModal()}
         
         {/* Header personalizado */}
-        <View style={styles.header}>
+        <View style={[styles.header, { 
+          borderBottomColor: colors.border, 
+          backgroundColor: colors.background 
+        }]}>
           <TouchableOpacity 
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <Ionicons name="chevron-back" size={24} color="#000" />
+            <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>Mis Favoritos</Text>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Mis Favoritos</Text>
             <MaterialCommunityIcons name="heart-multiple" size={18} color="#FF3B30" style={styles.headerIcon} />
           </View>
           <View style={{width: 40}} />
@@ -762,22 +823,26 @@ const FavoritosScreen = () => {
         
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#000" />
-            <Text style={styles.loadingText}>Cargando tus favoritos...</Text>
+            <ActivityIndicator size="large" color={colors.text} />
+            <Text style={[styles.loadingText, { color: colors.secondaryText }]}>
+              Cargando tus favoritos...
+            </Text>
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
-            <FontAwesome5 name="exclamation-circle" size={50} color="#ff3b30" />
-            <Text style={styles.errorText}>{error}</Text>
+            <FontAwesome5 name="exclamation-circle" size={50} color={colors.error} />
+            <Text style={[styles.errorText, { color: colors.secondaryText }]}>{error}</Text>
             <TouchableOpacity 
-              style={styles.exploreButton}
+              style={[styles.exploreButton, { backgroundColor: colors.button }]}
               onPress={() => {
                 router.push('/(tabs)/tienda');
                 showToast('Vamos a explorar la tienda', 'info', 'search');
               }}
               activeOpacity={0.7}
             >
-              <Text style={styles.exploreButtonText}>Explorar productos</Text>
+              <Text style={[styles.exploreButtonText, { color: colors.buttonText }]}>
+                Explorar productos
+              </Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -838,13 +903,13 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   backButton: {
-  width: 44,
-  height: 44,
-  borderRadius: 22,
-  alignItems: 'center',
-  justifyContent: 'center',
-  backgroundColor: 'transparent',
-},
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',

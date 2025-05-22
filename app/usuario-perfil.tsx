@@ -12,6 +12,7 @@ import {
   Animated,
   Platform,
   StatusBar,
+  Switch,
   TouchableWithoutFeedback
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +21,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, Stack } from 'expo-router';
 import { useFavoritos } from './hooks/useFavoritos';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useColorScheme } from './hooks/useColorScheme';
+// Quitamos la importación del ThemeToggle que no funciona
+// import { ThemeToggle } from './components/ThemeToggle';
 
 const { width } = Dimensions.get('window');
 
@@ -33,20 +37,136 @@ interface UserData {
   created_at?: string;
 }
 
+// Función para obtener colores según el tema
+const getColors = (isDark: boolean) => ({
+  background: isDark ? '#121212' : '#ffffff',
+  secondaryBackground: isDark ? '#1e1e1e' : '#f8f8f8',
+  text: isDark ? '#ffffff' : '#000000',
+  secondaryText: isDark ? '#b0b0b0' : '#666666',
+  border: isDark ? '#2c2c2c' : '#eeeeee',
+  card: isDark ? '#1e1e1e' : '#ffffff',
+  subtle: isDark ? '#2c2c2c' : '#f5f5f5',
+  button: isDark ? '#2c2c2c' : '#000000',
+  buttonText: isDark ? '#ffffff' : '#ffffff',
+  error: isDark ? '#ff6b6b' : '#ff3b30',
+  modalBackground: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)',
+  success: isDark ? '#4ddb64' : '#4CAF50',
+  switchTrack: isDark ? '#333' : '#e6e6e6',
+  switchThumb: isDark ? '#FFD60A' : '#FF9500',
+});
+
+// Componente AnimatedThemeToggle para reemplazar SimpleThemeToggle
+interface ThemeToggleProps {
+  isDark: boolean;
+  toggleTheme: () => void;
+  size?: 'small' | 'medium' | 'large';
+}
+
+const AnimatedThemeToggle: React.FC<ThemeToggleProps> = ({ 
+  isDark, 
+  toggleTheme,
+  size = 'medium'
+}) => {
+  const containerScale = size === 'small' ? 0.8 : size === 'large' ? 1.2 : 1;
+  const colors = getColors(isDark);
+  
+  // Animation values
+  const toggleAnim = useRef(new Animated.Value(isDark ? 1 : 0)).current;
+  
+  // Update animation when theme changes
+  useEffect(() => {
+    Animated.spring(toggleAnim, {
+      toValue: isDark ? 1 : 0,
+      friction: 5,
+      tension: 40,
+      useNativeDriver: false,
+    }).start();
+  }, [isDark, toggleAnim]);
+  
+  // Interpolated values for animations
+  const translateX = toggleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [2, 22] // Adjust based on container width
+  });
+  
+  const rotation = toggleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg']
+  });
+  
+  const backgroundColor = toggleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#e6e6e6', '#333'] // Light to dark track
+  });
+  
+  return (
+    <View style={{ transform: [{ scale: containerScale }] }}>
+      <TouchableWithoutFeedback onPress={toggleTheme}>
+        <View>
+          <Animated.View 
+            style={{
+              width: 48,
+              height: 26,
+              borderRadius: 13,
+              backgroundColor: backgroundColor,
+              padding: 2
+            }}
+          >
+            <Animated.View 
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 11,
+                backgroundColor: isDark ? '#FFD60A' : '#FF9500',
+                transform: [
+                  { translateX },
+                  { rotate: rotation }
+                ],
+                justifyContent: 'center',
+                alignItems: 'center',
+                ...Platform.select({
+                  ios: {
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 2,
+                  },
+                  android: {
+                    elevation: 2,
+                  },
+                }),
+              }}
+            >
+              <FontAwesome5 
+                name={isDark ? "moon" : "sun"} 
+                size={12} 
+                color={isDark ? "#121212" : "#fff"} 
+              />
+            </Animated.View>
+          </Animated.View>
+        </View>
+      </TouchableWithoutFeedback>
+    </View>
+  );
+};
+
 // Componente para el Modal de Cierre de Sesión
 const LogoutModal = ({
   visible,
   onClose,
   onConfirm,
-  userData
+  userData,
+  isDarkMode
 }: {
   visible: boolean;
   onClose: () => void;
   onConfirm: () => void;
   userData: UserData | null;
+  isDarkMode: boolean;
 }) => {
   const modalScaleAnim = useRef(new Animated.Value(0.9)).current;
   const modalOpacityAnim = useRef(new Animated.Value(0)).current;
+  const colors = getColors(isDarkMode);
   
   useEffect(() => {
     if (visible) {
@@ -88,22 +208,23 @@ const LogoutModal = ({
       onRequestClose={onClose}
       animationType="none"
     >
-      <View style={styles.modalOverlay}>
+      <View style={[styles.modalOverlay, { backgroundColor: colors.modalBackground }]}>
         <Animated.View
           style={[
             styles.modalContainer,
             {
               opacity: modalOpacityAnim,
               transform: [{ scale: modalScaleAnim }],
+              backgroundColor: colors.card
             },
           ]}
         >
           {/* Botón X para cerrar el modal */}
           <TouchableOpacity 
-            style={styles.modalCloseButton} 
+            style={[styles.modalCloseButton, { backgroundColor: colors.subtle }]} 
             onPress={onClose}
           >
-            <FontAwesome5 name="times" size={20} color="#999" />
+            <FontAwesome5 name="times" size={20} color={colors.secondaryText} />
           </TouchableOpacity>
 
           <View style={styles.modalIconContainer}>
@@ -112,9 +233,9 @@ const LogoutModal = ({
             </View>
           </View>
 
-          <Text style={styles.modalTitle}>Cerrar Sesión</Text>
+          <Text style={[styles.modalTitle, { color: colors.text }]}>Cerrar Sesión</Text>
 
-          <Text style={styles.modalMessage}>
+          <Text style={[styles.modalMessage, { color: colors.secondaryText }]}>
             ¿Estás seguro que deseas cerrar sesión?
           </Text>
 
@@ -134,6 +255,10 @@ const LogoutModal = ({
 const UserProfileScreen = () => {
   const router = useRouter();
   const { cambiarUsuario } = useFavoritos();
+  const { colorScheme, toggleColorScheme } = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const colors = getColors(isDarkMode);
+  
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -177,34 +302,31 @@ const UserProfileScreen = () => {
   }, []);
 
   const handleLogout = async () => {
-  try {
-    setLogoutLoading(true);
-    
-    // Obtener el email actual antes de limpiar los datos
-    const userDataStr = await AsyncStorage.getItem('userData');
-    const userData = userDataStr ? JSON.parse(userDataStr) : null;
-    const email = userData?.email || null;
-    
-    // CAMBIAR ESTAS LÍNEAS: Eliminar solo los datos de sesión
-    // await AsyncStorage.clear(); <-- ELIMINAR ESTA LÍNEA
-    
-    // Eliminar solo el token y los datos de usuario
-    await AsyncStorage.removeItem('userToken');
-    await AsyncStorage.removeItem('userData');
-    // Puedes eliminar cualquier otro dato de sesión aquí
-    
-    // Cambiar a favoritos anónimos pero mantener los actuales favoritos
-    await cambiarUsuario('anonymous');
-    
-    setTimeout(() => {
+    try {
+      setLogoutLoading(true);
+      
+      // Obtener el email actual antes de limpiar los datos
+      const userDataStr = await AsyncStorage.getItem('userData');
+      const userData = userDataStr ? JSON.parse(userDataStr) : null;
+      const email = userData?.email || null;
+      
+      // Eliminar solo el token y los datos de usuario
+      await AsyncStorage.removeItem('userToken');
+      await AsyncStorage.removeItem('userData');
+      // Puedes eliminar cualquier otro dato de sesión aquí
+      
+      // Cambiar a favoritos anónimos pero mantener los actuales favoritos
+      await cambiarUsuario('anonymous');
+      
+      setTimeout(() => {
+        setLogoutLoading(false);
+        router.push('/perfil');
+      }, 500);
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error);
       setLogoutLoading(false);
-      router.push('/perfil');
-    }, 500);
-  } catch (error) {
-    console.error('Error al cerrar sesión:', error);
-    setLogoutLoading(false);
-  }
-};
+    }
+  };
 
   // Formatear fecha para mostrarla con formato más amigable
   const formatDate = (dateString?: string) => {
@@ -222,8 +344,8 @@ const UserProfileScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       <Stack.Screen
         options={{
           headerShown: false,
@@ -231,35 +353,41 @@ const UserProfileScreen = () => {
       />
       
       <LinearGradient
-        colors={['#f8f8f8', '#ffffff']}
+        colors={[colors.secondaryBackground, colors.background]}
         style={styles.gradientBackground}
       >
-        {/* Header minimalista */}
-        <View style={styles.header}>
+        {/* Header con botón de tema */}
+        <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
           <TouchableOpacity 
             style={styles.backButton}
             onPress={() => router.push('/(tabs)')}
           >
-            <Ionicons name="chevron-back" size={24} color="#000" />
+            <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Mi Perfil</Text>
-          <View style={{width: 40}} />
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Mi Perfil</Text>
+          
+          {/* Usar el toggle animado */}
+          <AnimatedThemeToggle 
+            isDark={isDarkMode}
+            toggleTheme={toggleColorScheme}
+            size="small"
+          />
         </View>
         
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#000" />
-            <Text style={styles.loadingText}>Cargando perfil...</Text>
+            <ActivityIndicator size="large" color={colors.text} />
+            <Text style={[styles.loadingText, { color: colors.secondaryText }]}>Cargando perfil...</Text>
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
-            <FontAwesome5 name="exclamation-circle" size={50} color="#ff3b30" />
-            <Text style={styles.errorText}>{error}</Text>
+            <FontAwesome5 name="exclamation-circle" size={50} color={colors.error} />
+            <Text style={[styles.errorText, { color: colors.secondaryText }]}>{error}</Text>
             <TouchableOpacity 
-              style={styles.loginButton}
+              style={[styles.loginButton, { backgroundColor: colors.button }]}
               onPress={() => router.replace('/perfil')}
             >
-              <Text style={styles.loginButtonText}>Iniciar sesión</Text>
+              <Text style={[styles.loginButtonText, { color: colors.buttonText }]}>Iniciar sesión</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -277,108 +405,158 @@ const UserProfileScreen = () => {
               {/* Avatar y nombre de usuario */}
               <View style={styles.profileHeader}>
                 <View style={styles.avatarContainer}>
-                  <View style={styles.avatar}>
-                    <FontAwesome5 name="user" size={40} color="#000" />
+                  <View style={[styles.avatar, { 
+                    backgroundColor: colors.subtle,
+                    borderColor: colors.border 
+                  }]}>
+                    <FontAwesome5 name="user" size={40} color={colors.text} />
                   </View>
                   <View style={styles.activeIndicator} />
                 </View>
-                <Text style={styles.userName}>{userData?.nombre || 'Usuario'}</Text>
-                <Text style={styles.userRole}>
+                <Text style={[styles.userName, { color: colors.text }]}>{userData?.nombre || 'Usuario'}</Text>
+                <Text style={[styles.userRole, { 
+                  backgroundColor: colors.subtle, 
+                  color: colors.secondaryText 
+                }]}>
                   {userData?.rol === 'admin' ? 'Administrador' : 'Cliente'}
                 </Text>
               </View>
               
               {/* Información del usuario */}
               <View style={styles.infoContainer}>
-                <Text style={styles.sectionTitle}>Información Personal</Text>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Información Personal</Text>
                 
-                <View style={styles.infoCard}>
+                <View style={[styles.infoCard, { 
+                  backgroundColor: colors.card,
+                  ...(Platform.OS === 'android' ? { borderColor: colors.border } : {})
+                }]}>
                   <View style={styles.infoItem}>
-                    <View style={styles.infoIconContainer}>
-                      <FontAwesome5 name="envelope" size={16} color="#000" />
+                    <View style={[styles.infoIconContainer, { backgroundColor: colors.subtle }]}>
+                      <FontAwesome5 name="envelope" size={16} color={colors.text} />
                     </View>
                     <View style={styles.infoContent}>
-                      <Text style={styles.infoLabel}>Correo electrónico</Text>
-                      <Text style={styles.infoValue}>{userData?.email || 'No disponible'}</Text>
+                      <Text style={[styles.infoLabel, { color: colors.secondaryText }]}>Correo electrónico</Text>
+                      <Text style={[styles.infoValue, { color: colors.text }]}>{userData?.email || 'No disponible'}</Text>
                     </View>
                   </View>
                   
-                  <View style={styles.separator} />
+                  <View style={[styles.separator, { backgroundColor: colors.border }]} />
                   
                   <View style={styles.infoItem}>
-                    <View style={styles.infoIconContainer}>
-                      <FontAwesome5 name="phone" size={16} color="#000" />
+                    <View style={[styles.infoIconContainer, { backgroundColor: colors.subtle }]}>
+                      <FontAwesome5 name="phone" size={16} color={colors.text} />
                     </View>
                     <View style={styles.infoContent}>
-                      <Text style={styles.infoLabel}>Teléfono</Text>
-                      <Text style={styles.infoValue}>{userData?.telefono || 'No disponible'}</Text>
+                      <Text style={[styles.infoLabel, { color: colors.secondaryText }]}>Teléfono</Text>
+                      <Text style={[styles.infoValue, { color: colors.text }]}>{userData?.telefono || 'No disponible'}</Text>
                     </View>
                   </View>
                   
-                  <View style={styles.separator} />
+                  <View style={[styles.separator, { backgroundColor: colors.border }]} />
                   
                   <View style={styles.infoItem}>
-                    <View style={styles.infoIconContainer}>
-                      <FontAwesome5 name="map-marker-alt" size={16} color="#000" />
+                    <View style={[styles.infoIconContainer, { backgroundColor: colors.subtle }]}>
+                      <FontAwesome5 name="map-marker-alt" size={16} color={colors.text} />
                     </View>
                     <View style={styles.infoContent}>
-                      <Text style={styles.infoLabel}>Dirección</Text>
-                      <Text style={styles.infoValue}>{userData?.direccion || 'No disponible'}</Text>
+                      <Text style={[styles.infoLabel, { color: colors.secondaryText }]}>Dirección</Text>
+                      <Text style={[styles.infoValue, { color: colors.text }]}>{userData?.direccion || 'No disponible'}</Text>
                     </View>
                   </View>
                   
-                  <View style={styles.separator} />
+                  <View style={[styles.separator, { backgroundColor: colors.border }]} />
                   
                   <View style={styles.infoItem}>
-                    <View style={styles.infoIconContainer}>
-                      <FontAwesome5 name="calendar" size={16} color="#000" />
+                    <View style={[styles.infoIconContainer, { backgroundColor: colors.subtle }]}>
+                      <FontAwesome5 name="calendar" size={16} color={colors.text} />
                     </View>
                     <View style={styles.infoContent}>
-                      <Text style={styles.infoLabel}>Miembro desde</Text>
-                      <Text style={styles.infoValue}>{formatDate(userData?.created_at)}</Text>
+                      <Text style={[styles.infoLabel, { color: colors.secondaryText }]}>Miembro desde</Text>
+                      <Text style={[styles.infoValue, { color: colors.text }]}>{formatDate(userData?.created_at)}</Text>
                     </View>
                   </View>
                 </View>
               </View>
               
-              {/* Acciones de usuario */}
+              {/* Nueva sección para Tema de la Aplicación */}
               <View style={styles.actionsContainer}>
-                <Text style={styles.sectionTitle}>Mi Cuenta</Text>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Tema de la Aplicación</Text>
                 
                 <TouchableOpacity 
-                  style={styles.actionButton}
+                  style={[styles.actionButton, { 
+                    backgroundColor: colors.card,
+                    ...(Platform.OS === 'android' ? { borderColor: colors.border } : {})
+                  }]}
+                  onPress={toggleColorScheme}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.actionIconContainer, { backgroundColor: colors.subtle }]}>
+                    <FontAwesome5 
+                      name={isDarkMode ? "moon" : "sun"} 
+                      size={20} 
+                      color={isDarkMode ? "#FFD60A" : "#FF9500"} 
+                    />
+                  </View>
+                  <Text style={[styles.actionButtonText, { color: colors.text }]}>
+                    Tema {isDarkMode ? 'Oscuro' : 'Claro'}
+                  </Text>
+                  
+                  {/* Usar el toggle animado */}
+                  <AnimatedThemeToggle 
+                    isDark={isDarkMode}
+                    toggleTheme={toggleColorScheme}
+                    size="medium"
+                  />
+                </TouchableOpacity>
+              </View>
+              
+              {/* Acciones de usuario */}
+              <View style={styles.actionsContainer}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Mi Cuenta</Text>
+                
+                <TouchableOpacity 
+                  style={[styles.actionButton, { 
+                    backgroundColor: colors.card,
+                    ...(Platform.OS === 'android' ? { borderColor: colors.border } : {}) 
+                  }]}
                   onPress={() => router.push('/favoritos')}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.actionIconContainer}>
-                    <FontAwesome5 name="heart" size={20} color="#000" />
+                  <View style={[styles.actionIconContainer, { backgroundColor: colors.subtle }]}>
+                    <FontAwesome5 name="heart" size={20} color={colors.text} />
                   </View>
-                  <Text style={styles.actionButtonText}>Favoritos</Text>
-                  <FontAwesome5 name="chevron-right" size={16} color="#999" />
+                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Favoritos</Text>
+                  <FontAwesome5 name="chevron-right" size={16} color={colors.secondaryText} />
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
-                  style={styles.actionButton}
+                  style={[styles.actionButton, { 
+                    backgroundColor: colors.card,
+                    ...(Platform.OS === 'android' ? { borderColor: colors.border } : {}) 
+                  }]}
                   onPress={() => router.push('/editar-perfil')}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.actionIconContainer}>
-                    <FontAwesome5 name="user-edit" size={20} color="#000" />
+                  <View style={[styles.actionIconContainer, { backgroundColor: colors.subtle }]}>
+                    <FontAwesome5 name="user-edit" size={20} color={colors.text} />
                   </View>
-                  <Text style={styles.actionButtonText}>Editar Perfil</Text>
-                  <FontAwesome5 name="chevron-right" size={16} color="#999" />
+                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Editar Perfil</Text>
+                  <FontAwesome5 name="chevron-right" size={16} color={colors.secondaryText} />
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
-                  style={styles.actionButton}
+                  style={[styles.actionButton, { 
+                    backgroundColor: colors.card,
+                    ...(Platform.OS === 'android' ? { borderColor: colors.border } : {}) 
+                  }]}
                   onPress={() => router.push('/favoritos')}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.actionIconContainer}>
-                    <FontAwesome5 name="shopping-bag" size={20} color="#000" />
+                  <View style={[styles.actionIconContainer, { backgroundColor: colors.subtle }]}>
+                    <FontAwesome5 name="shopping-bag" size={20} color={colors.text} />
                   </View>
-                  <Text style={styles.actionButtonText}>Historial de Pedidos</Text>
-                  <FontAwesome5 name="chevron-right" size={16} color="#999" />
+                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Historial de Pedidos</Text>
+                  <FontAwesome5 name="chevron-right" size={16} color={colors.secondaryText} />
                 </TouchableOpacity>
               </View>
               
@@ -401,22 +579,23 @@ const UserProfileScreen = () => {
                 </TouchableOpacity>
               </View>
               
-              {/* Modal de cierre de sesión */}
-              <LogoutModal
-                visible={showLogoutModal}
-                onClose={() => setShowLogoutModal(false)}
-                onConfirm={handleLogout}
-                userData={userData}
-              />
-              
               {/* Versión de la app */}
               <View style={styles.versionContainer}>
-                <Text style={styles.versionText}>Ohana App v1.0.0</Text>
+                <Text style={[styles.versionText, { color: colors.secondaryText }]}>Ohana App v1.0.0</Text>
               </View>
             </Animated.View>
           </ScrollView>
         )}
       </LinearGradient>
+      
+      {/* Modal de cierre de sesión con soporte para tema */}
+      <LogoutModal
+        visible={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={handleLogout}
+        userData={userData}
+        isDarkMode={isDarkMode}
+      />
     </SafeAreaView>
   );
 };
@@ -447,13 +626,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   backButton: {
-  width: 44,
-  height: 44,
-  borderRadius: 22,
-  alignItems: 'center',
-  justifyContent: 'center',
-  backgroundColor: 'transparent',
-},
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
   scrollView: {
     flex: 1,
   },
@@ -749,7 +928,7 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: 'rgba(255, 59, 48, 0.1)', // Color rojo para cerrar sesión
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -773,11 +952,11 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   modalConfirmButton: {
-    width: '70%', // Ancho reducido para centrarlo
+    width: '70%',
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FF3B30', // Color rojo para cerrar sesión
+    backgroundColor: '#FF3B30',
     borderRadius: 10,
     ...Platform.select({
       ios: {

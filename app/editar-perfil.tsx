@@ -21,12 +21,40 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Formik } from 'formik';
 import * as Yup from 'yup';
 import axios from 'axios';
+import { useColorScheme } from './hooks/useColorScheme';
 
 // URL base para la API
 const API_BASE_URL = 'https://ohanatienda.ddns.net';
 
 // Obtener el ancho de la pantalla para el toast
 const { width } = Dimensions.get('window');
+
+// Función para obtener colores según el tema
+const getColors = (isDark: boolean) => ({
+  background: isDark ? '#121212' : '#ffffff',
+  secondaryBackground: isDark ? '#1e1e1e' : '#f8f8f8',
+  text: isDark ? '#ffffff' : '#000000',
+  secondaryText: isDark ? '#b0b0b0' : '#666666',
+  border: isDark ? '#2c2c2c' : '#eeeeee',
+  card: isDark ? '#1e1e1e' : '#ffffff',
+  subtle: isDark ? '#2c2c2c' : '#f5f5f5',
+  button: isDark ? '#2c2c2c' : '#000000',
+  buttonText: isDark ? '#ffffff' : '#ffffff',
+  inputBackground: isDark ? '#2c2c2c' : '#ffffff',
+  inputBorder: isDark ? '#383838' : '#dddddd',
+  inputText: isDark ? '#ffffff' : '#333333',
+  placeholder: isDark ? '#808080' : '#999999',
+  error: isDark ? '#ff6b6b' : '#ff3b30',
+  modalBackground: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)',
+  success: isDark ? '#4ddb64' : '#4CAF50',
+  footerText: isDark ? '#808080' : '#888888',
+  hintText: isDark ? '#808080' : '#888888',
+  cardBg: isDark ? '#1e1e1e' : '#ffffff',
+  passwordSection: isDark ? '#1a1a1a' : '#f9f9f9',
+  sectionBorder: isDark ? '#3a3a3a' : '#000000',
+  cancelBg: isDark ? '#2c2c2c' : '#ffffff',
+  cancelText: isDark ? '#ffffff' : '#333333'
+});
 
 // Interfaz para los Toasts personalizados
 interface ToastMessage {
@@ -35,14 +63,22 @@ interface ToastMessage {
   icon?: string;
 }
 
-// Componente Toast mejorado
-const Toast: React.FC<{ visible: boolean; message: string; type?: 'success' | 'error' | 'warning' | 'info'; icon?: string }> = ({ 
+// Componente Toast mejorado con soporte para tema
+const Toast: React.FC<{ 
+  visible: boolean; 
+  message: string; 
+  type?: 'success' | 'error' | 'warning' | 'info'; 
+  icon?: string;
+  isDarkMode: boolean;
+}> = ({ 
   visible, 
   message, 
   type = 'success',
-  icon
+  icon,
+  isDarkMode
 }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const colors = getColors(isDarkMode);
   
   useEffect(() => {
     if (visible) {
@@ -65,30 +101,30 @@ const Toast: React.FC<{ visible: boolean; message: string; type?: 'success' | 'e
   // Determinar colores según tipo
   let accentColor: string;
   let iconName: React.ComponentProps<typeof Ionicons>['name'];
-  let backgroundColor = '#FFFFFF';
+  let backgroundColor = isDarkMode ? '#1e1e1e' : '#FFFFFF';
   let iconBackgroundColor = '';
 
   switch(type) {
     case 'success':
       accentColor = '#4CAF50';
       iconName = (icon as React.ComponentProps<typeof Ionicons>['name']) || 'checkmark-circle';
-      iconBackgroundColor = 'rgba(76, 175, 80, 0.15)';
+      iconBackgroundColor = isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.15)';
       break;
     case 'error':
       accentColor = '#FF3B30';
       iconName = (icon as React.ComponentProps<typeof Ionicons>['name']) || 'close-circle';
-      iconBackgroundColor = 'rgba(255, 59, 48, 0.15)';
+      iconBackgroundColor = isDarkMode ? 'rgba(255, 59, 48, 0.2)' : 'rgba(255, 59, 48, 0.15)';
       break;
     case 'warning':
       accentColor = '#FF9500';
       iconName = (icon as React.ComponentProps<typeof Ionicons>['name']) || 'warning';
-      iconBackgroundColor = 'rgba(255, 149, 0, 0.15)';
+      iconBackgroundColor = isDarkMode ? 'rgba(255, 149, 0, 0.2)' : 'rgba(255, 149, 0, 0.15)';
       break;
     case 'info':
     default:
       accentColor = '#007AFF';
       iconName = (icon as React.ComponentProps<typeof Ionicons>['name']) || 'information-circle';
-      iconBackgroundColor = 'rgba(0, 122, 255, 0.15)';
+      iconBackgroundColor = isDarkMode ? 'rgba(0, 122, 255, 0.2)' : 'rgba(0, 122, 255, 0.15)';
       break;
   }
 
@@ -98,6 +134,7 @@ const Toast: React.FC<{ visible: boolean; message: string; type?: 'success' | 'e
         styles.toast,
         { 
           opacity: fadeAnim,
+          backgroundColor: backgroundColor
         }
       ]}
     >
@@ -106,7 +143,7 @@ const Toast: React.FC<{ visible: boolean; message: string; type?: 'success' | 'e
         <View style={[styles.toastIconContainer, { backgroundColor: iconBackgroundColor }]}>
           <Ionicons name={iconName} size={20} color={accentColor} />
         </View>
-        <Text style={styles.toastText}>{message}</Text>
+        <Text style={[styles.toastText, { color: colors.text }]}>{message}</Text>
       </View>
     </Animated.View>
   );
@@ -159,6 +196,10 @@ interface ProfileFormValues extends UserData {
 
 const EditProfileScreen = () => {
   const router = useRouter();
+  const { colorScheme } = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const colors = getColors(isDarkMode);
+
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -351,8 +392,8 @@ const EditProfileScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       <Stack.Screen
         options={{
           headerShown: false,
@@ -360,35 +401,35 @@ const EditProfileScreen = () => {
       />
       
       <LinearGradient
-        colors={['#f8f8f8', '#ffffff']}
+        colors={[colors.secondaryBackground, colors.background]}
         style={styles.gradientBackground}
       >
         {/* Header personalizado */}
-        <View style={styles.header}>
+        <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
           <TouchableOpacity 
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <Ionicons name="chevron-back" size={24} color="#000" />
+            <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Editar Perfil</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Editar Perfil</Text>
           <View style={{width: 40}} />
         </View>
         
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#000" />
-            <Text style={styles.loadingText}>Cargando tus datos...</Text>
+            <ActivityIndicator size="large" color={colors.text} />
+            <Text style={[styles.loadingText, { color: colors.secondaryText }]}>Cargando tus datos...</Text>
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
-            <FontAwesome5 name="exclamation-circle" size={50} color="#ff3b30" />
-            <Text style={styles.errorText}>{error}</Text>
+            <FontAwesome5 name="exclamation-circle" size={50} color={colors.error} />
+            <Text style={[styles.errorText, { color: colors.secondaryText }]}>{error}</Text>
             <TouchableOpacity 
-              style={styles.loginButton}
+              style={[styles.loginButton, { backgroundColor: colors.button }]}
               onPress={() => router.replace('/perfil')}
             >
-              <Text style={styles.loginButtonText}>Volver</Text>
+              <Text style={[styles.loginButtonText, { color: colors.buttonText }]}>Volver</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -404,11 +445,14 @@ const EditProfileScreen = () => {
               <View style={styles.formContainer}>
                 <View style={styles.profileHeader}>
                   <View style={styles.avatarContainer}>
-                    <View style={styles.avatar}>
-                      <FontAwesome5 name="user" size={40} color="#000" />
+                    <View style={[styles.avatar, { 
+                      backgroundColor: colors.subtle,
+                      borderColor: colors.border 
+                    }]}>
+                      <FontAwesome5 name="user" size={40} color={colors.text} />
                     </View>
                   </View>
-                  <Text style={styles.subtitle}>
+                  <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
                     Actualiza tu información personal
                   </Text>
                 </View>
@@ -429,16 +473,21 @@ const EditProfileScreen = () => {
                   {({ handleChange, handleBlur, handleSubmit, values, errors, touched, resetForm }) => (
                     <View>
                       <View style={styles.inputGroup}>
-                        <Text style={styles.inputLabel}>Nombre</Text>
+                        <Text style={[styles.inputLabel, { color: colors.text }]}>Nombre</Text>
                         <TextInput
                           style={[
                             styles.input,
-                            touched.nombre && errors.nombre && styles.inputError
+                            { 
+                              backgroundColor: colors.inputBackground,
+                              borderColor: touched.nombre && errors.nombre ? colors.error : colors.inputBorder,
+                              color: colors.inputText
+                            }
                           ]}
                           value={values.nombre}
                           onChangeText={handleChange('nombre')}
                           onBlur={handleBlur('nombre')}
                           placeholder="Ingresa tu nombre"
+                          placeholderTextColor={colors.placeholder}
                           editable={!submitting}
                         />
                         {touched.nombre && errors.nombre && (
@@ -447,16 +496,21 @@ const EditProfileScreen = () => {
                       </View>
 
                       <View style={styles.inputGroup}>
-                        <Text style={styles.inputLabel}>Correo electrónico</Text>
+                        <Text style={[styles.inputLabel, { color: colors.text }]}>Correo electrónico</Text>
                         <TextInput
                           style={[
                             styles.input,
-                            touched.email && errors.email && styles.inputError
+                            { 
+                              backgroundColor: colors.inputBackground,
+                              borderColor: touched.email && errors.email ? colors.error : colors.inputBorder,
+                              color: colors.inputText
+                            }
                           ]}
                           value={values.email}
                           onChangeText={handleChange('email')}
                           onBlur={handleBlur('email')}
                           placeholder="Ingresa tu correo electrónico"
+                          placeholderTextColor={colors.placeholder}
                           keyboardType="email-address"
                           editable={!submitting}
                           autoCapitalize="none"
@@ -467,16 +521,21 @@ const EditProfileScreen = () => {
                       </View>
 
                       <View style={styles.inputGroup}>
-                        <Text style={styles.inputLabel}>Teléfono</Text>
+                        <Text style={[styles.inputLabel, { color: colors.text }]}>Teléfono</Text>
                         <TextInput
                           style={[
                             styles.input,
-                            touched.telefono && errors.telefono && styles.inputError
+                            { 
+                              backgroundColor: colors.inputBackground,
+                              borderColor: touched.telefono && errors.telefono ? colors.error : colors.inputBorder,
+                              color: colors.inputText
+                            }
                           ]}
                           value={values.telefono}
                           onChangeText={handleChange('telefono')}
                           onBlur={handleBlur('telefono')}
                           placeholder="Ingresa tu número de teléfono"
+                          placeholderTextColor={colors.placeholder}
                           keyboardType="phone-pad"
                           editable={!submitting}
                         />
@@ -486,17 +545,22 @@ const EditProfileScreen = () => {
                       </View>
 
                       <View style={styles.inputGroup}>
-                        <Text style={styles.inputLabel}>Dirección</Text>
+                        <Text style={[styles.inputLabel, { color: colors.text }]}>Dirección</Text>
                         <TextInput
                           style={[
                             styles.input,
-                            touched.direccion && errors.direccion && styles.inputError,
-                            styles.textArea
+                            styles.textArea,
+                            { 
+                              backgroundColor: colors.inputBackground,
+                              borderColor: touched.direccion && errors.direccion ? colors.error : colors.inputBorder,
+                              color: colors.inputText
+                            }
                           ]}
                           value={values.direccion}
                           onChangeText={handleChange('direccion')}
                           onBlur={handleBlur('direccion')}
                           placeholder="Ingresa tu dirección"
+                          placeholderTextColor={colors.placeholder}
                           multiline
                           numberOfLines={3}
                           textAlignVertical="top"
@@ -509,20 +573,27 @@ const EditProfileScreen = () => {
                       
                       {/* Campo de contraseña actual (fuera de sección de seguridad) */}
                       <View style={styles.inputGroup}>
-                        <Text style={styles.inputLabel}>Contraseña actual</Text>
-                        <Text style={styles.passwordInfo}>
+                        <Text style={[styles.inputLabel, { color: colors.text }]}>Contraseña actual</Text>
+                        <Text style={[styles.passwordInfo, { color: colors.secondaryText }]}>
                           Necesaria para confirmar cualquier cambio en tu perfil
                         </Text>
-                        <View style={styles.passwordInputContainer}>
+                        <View style={[
+                          styles.passwordInputContainer,
+                          { 
+                            backgroundColor: colors.inputBackground,
+                            borderColor: touched.currentPassword && errors.currentPassword ? colors.error : colors.inputBorder
+                          }
+                        ]}>
                           <TextInput
                             style={[
                               styles.passwordInput,
-                              touched.currentPassword && errors.currentPassword && styles.inputError
+                              { color: colors.inputText }
                             ]}
                             value={values.currentPassword}
                             onChangeText={handleChange('currentPassword')}
                             onBlur={handleBlur('currentPassword')}
                             placeholder="Ingresa tu contraseña actual"
+                            placeholderTextColor={colors.placeholder}
                             secureTextEntry={!showCurrentPassword}
                             editable={!submitting}
                           />
@@ -533,7 +604,7 @@ const EditProfileScreen = () => {
                             <Ionicons 
                               name={showCurrentPassword ? "eye-off" : "eye"} 
                               size={22} 
-                              color="#666" 
+                              color={colors.secondaryText} 
                             />
                           </TouchableOpacity>
                         </View>
@@ -545,7 +616,13 @@ const EditProfileScreen = () => {
                       {/* Sección de cambio de contraseña (opcional) */}
                       <View style={styles.securitySection}>
                         <TouchableOpacity
-                          style={styles.passwordToggleContainer}
+                          style={[
+                            styles.passwordToggleContainer,
+                            { 
+                              backgroundColor: colors.subtle,
+                              borderColor: colors.border 
+                            }
+                          ]}
                           onPress={() => {
                             // Si estamos cerrando la sección, limpiar los campos
                             if (showPasswordSection) {
@@ -557,15 +634,15 @@ const EditProfileScreen = () => {
                           activeOpacity={0.7}
                         >
                           <View style={styles.passwordToggleLeft}>
-                            <FontAwesome5 name="lock" size={18} color="#000" style={styles.passwordIcon} />
-                            <Text style={styles.passwordToggleText}>
+                            <FontAwesome5 name="lock" size={18} color={colors.text} style={styles.passwordIcon} />
+                            <Text style={[styles.passwordToggleText, { color: colors.text }]}>
                               {showPasswordSection ? 'Cancelar cambio de contraseña' : 'Cambiar contraseña (opcional)'}
                             </Text>
                           </View>
                           <Ionicons 
                             name={showPasswordSection ? "chevron-up" : "chevron-down"} 
                             size={20} 
-                            color="#000" 
+                            color={colors.text} 
                           />
                         </TouchableOpacity>
                         
@@ -578,31 +655,40 @@ const EditProfileScreen = () => {
                                   inputRange: [0, 1],
                                   outputRange: [0, 300]
                                 }),
-                                opacity: slideAnim
+                                opacity: slideAnim,
+                                backgroundColor: colors.passwordSection,
+                                borderLeftColor: colors.sectionBorder
                               }
                             ]}
                           >
                             <View style={styles.passwordHeaderSection}>
-                              <FontAwesome5 name="shield-alt" size={16} color="#000" />
-                              <Text style={styles.passwordSectionTitle}>Nueva contraseña</Text>
+                              <FontAwesome5 name="shield-alt" size={16} color={colors.text} />
+                              <Text style={[styles.passwordSectionTitle, { color: colors.text }]}>Nueva contraseña</Text>
                             </View>
                             
-                            <Text style={styles.passwordInfo}>
+                            <Text style={[styles.passwordInfo, { color: colors.secondaryText }]}>
                               Si deseas cambiar tu contraseña, rellena los siguientes campos.
                             </Text>
                             
                             <View style={styles.inputGroup}>
-                              <Text style={styles.inputLabel}>Nueva contraseña</Text>
-                              <View style={styles.passwordInputContainer}>
+                              <Text style={[styles.inputLabel, { color: colors.text }]}>Nueva contraseña</Text>
+                              <View style={[
+                                styles.passwordInputContainer,
+                                { 
+                                  backgroundColor: colors.inputBackground,
+                                  borderColor: touched.newPassword && errors.newPassword ? colors.error : colors.inputBorder
+                                }
+                              ]}>
                                 <TextInput
                                   style={[
                                     styles.passwordInput,
-                                    touched.newPassword && errors.newPassword && styles.inputError
+                                    { color: colors.inputText }
                                   ]}
                                   value={values.newPassword}
                                   onChangeText={handleChange('newPassword')}
                                   onBlur={handleBlur('newPassword')}
                                   placeholder="Ingresa tu nueva contraseña"
+                                  placeholderTextColor={colors.placeholder}
                                   secureTextEntry={!showNewPassword}
                                   editable={!submitting}
                                 />
@@ -613,28 +699,37 @@ const EditProfileScreen = () => {
                                   <Ionicons 
                                     name={showNewPassword ? "eye-off" : "eye"} 
                                     size={22} 
-                                    color="#666" 
+                                    color={colors.secondaryText} 
                                   />
                                 </TouchableOpacity>
                               </View>
                               {touched.newPassword && errors.newPassword && (
                                 <Text style={styles.errorText}>{errors.newPassword}</Text>
                               )}
-                              <Text style={styles.passwordHint}>La contraseña debe tener al menos 6 caracteres</Text>
+                              <Text style={[styles.passwordHint, { color: colors.hintText }]}>
+                                La contraseña debe tener al menos 6 caracteres
+                              </Text>
                             </View>
 
                             <View style={styles.inputGroup}>
-                              <Text style={styles.inputLabel}>Confirmar contraseña</Text>
-                              <View style={styles.passwordInputContainer}>
+                              <Text style={[styles.inputLabel, { color: colors.text }]}>Confirmar contraseña</Text>
+                              <View style={[
+                                styles.passwordInputContainer,
+                                { 
+                                  backgroundColor: colors.inputBackground,
+                                  borderColor: touched.confirmPassword && errors.confirmPassword ? colors.error : colors.inputBorder
+                                }
+                              ]}>
                                 <TextInput
                                   style={[
                                     styles.passwordInput,
-                                    touched.confirmPassword && errors.confirmPassword && styles.inputError
+                                    { color: colors.inputText }
                                   ]}
                                   value={values.confirmPassword}
                                   onChangeText={handleChange('confirmPassword')}
                                   onBlur={handleBlur('confirmPassword')}
                                   placeholder="Confirma tu nueva contraseña"
+                                  placeholderTextColor={colors.placeholder}
                                   secureTextEntry={!showConfirmPassword}
                                   editable={!submitting}
                                 />
@@ -645,7 +740,7 @@ const EditProfileScreen = () => {
                                   <Ionicons 
                                     name={showConfirmPassword ? "eye-off" : "eye"} 
                                     size={22} 
-                                    color="#666" 
+                                    color={colors.secondaryText} 
                                   />
                                 </TouchableOpacity>
                               </View>
@@ -659,15 +754,29 @@ const EditProfileScreen = () => {
 
                       <View style={styles.buttonsContainer}>
                         <TouchableOpacity
-                          style={[styles.cancelButton]}
+                          style={[
+                            styles.cancelButton,
+                            { 
+                              backgroundColor: colors.cancelBg,
+                              borderColor: colors.border
+                            }
+                          ]}
                           onPress={() => router.back()}
                           disabled={submitting}
                         >
-                          <Text style={styles.cancelButtonText}>Cancelar</Text>
+                          <Text style={[
+                            styles.cancelButtonText,
+                            { color: colors.cancelText }
+                          ]}>
+                            Cancelar
+                          </Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
-                          style={[styles.saveButton, submitting && styles.buttonDisabled]}
+                          style={[
+                            styles.saveButton,
+                            submitting && styles.buttonDisabled
+                          ]}
                           onPress={() => handleSubmit()}
                           disabled={submitting}
                         >
@@ -684,7 +793,7 @@ const EditProfileScreen = () => {
 
                 {userData?.created_at && (
                   <View style={styles.footerContainer}>
-                    <Text style={styles.footerText}>
+                    <Text style={[styles.footerText, { color: colors.footerText }]}>
                       Cuenta creada el {formatDate(userData.created_at)}
                     </Text>
                   </View>
@@ -701,6 +810,7 @@ const EditProfileScreen = () => {
         message={toast?.message || ''}
         type={toast?.type || 'success'}
         icon={toast?.icon}
+        isDarkMode={isDarkMode}
       />
     </SafeAreaView>
   );
@@ -741,13 +851,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   backButton: {
-  width: 44,
-  height: 44,
-  borderRadius: 22,
-  alignItems: 'center',
-  justifyContent: 'center',
-  backgroundColor: 'transparent',
-},
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',

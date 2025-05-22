@@ -8,12 +8,31 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack } from 'expo-router';
-import * as CartHook from '../hooks/useCart'; // Importación modificada
-import * as FavoritosHook from '../hooks/useFavoritos'; // Importación modificada
+import * as CartHook from '../hooks/useCart';
+import * as FavoritosHook from '../hooks/useFavoritos';
+import { useColorScheme } from '../hooks/useColorScheme'; // Add this import
 
 // Usar las exportaciones nombradas de los hooks
 const { useCart } = CartHook;
 const { useFavoritos } = FavoritosHook;
+
+// Add this function after your interface definitions
+const getColors = (isDark: boolean) => ({
+  background: isDark ? '#121212' : '#ffffff',
+  secondaryBackground: isDark ? '#1e1e1e' : '#f8f8f8',
+  text: isDark ? '#ffffff' : '#000000',
+  secondaryText: isDark ? '#b0b0b0' : '#666666',
+  border: isDark ? '#2c2c2c' : '#eeeeee',
+  card: isDark ? '#1e1e1e' : '#ffffff',
+  subtle: isDark ? '#2c2c2c' : '#f5f5f5',
+  headerBackground: isDark ? 'rgba(18, 18, 18, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+  searchBackground: isDark ? '#333333' : '#f5f5f5',
+  searchText: isDark ? '#ffffff' : '#333333',
+  searchPlaceholder: isDark ? '#999999' : '#666666',
+  shadow: isDark ? '#000000' : '#000000',
+  carruselBackground: isDark ? '#222222' : '#f8f8f8',
+  modalBackground: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)',
+});
 
 interface ImageData {
   id: number;
@@ -216,6 +235,9 @@ const UserAvatar = ({
 }) => {
   // Animación para el efecto de brillo
   const shineAnim = useRef(new Animated.Value(0)).current;
+  const { colorScheme } = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const colors = getColors(isDarkMode);
   
   // Animación al autenticar
   useEffect(() => {
@@ -252,7 +274,11 @@ const UserAvatar = ({
   
   return (
     <TouchableOpacity 
-      style={[styles.userAvatarContainer, isAuthenticated && styles.userAvatarAuthenticated]}
+      style={[
+        styles.userAvatarContainer, 
+        isAuthenticated && styles.userAvatarAuthenticated,
+        { backgroundColor: isDarkMode ? '#333333' : '#f5f5f5' }
+      ]}
       onPress={onPress}
       activeOpacity={0.8}
     >
@@ -278,22 +304,22 @@ const UserAvatar = ({
       )}
       
       {/* Icono o indicador de usuario */}
-      <View style={styles.userAvatarIconContainer}>
+      <View style={[styles.userAvatarIconContainer, { backgroundColor: isDarkMode ? '#222222' : '#ffffff' }]}>
         <FontAwesome5 
           name="user" 
           size={isAuthenticated ? 16 : 18} 
-          color={isAuthenticated ? "#333" : "#666"} 
+          color={isAuthenticated ? (isDarkMode ? "#eee" : "#333") : (isDarkMode ? "#aaa" : "#666")} 
           solid={isAuthenticated}
         />
       </View>
       
       {/* Nombre del usuario o texto "Mi Cuenta" */}
       {isAuthenticated ? (
-        <Text style={styles.userAvatarText}>
+        <Text style={[styles.userAvatarText, { color: colors.text }]}>
           {getShortName()}
         </Text>
       ) : (
-        <Text style={styles.userAvatarText}>Mi Cuenta</Text>
+        <Text style={[styles.userAvatarText, { color: colors.text }]}>Mi Cuenta</Text>
       )}
       
       {/* Indicador de estado de autenticación */}
@@ -548,6 +574,10 @@ const CategoryItem = React.memo(({
   index: number, 
   onPress: (name: string, id: number) => void 
 }) => {
+  // Add color scheme hook
+  const { colorScheme } = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const colors = getColors(isDarkMode);
   // Usa el mapeo de categorías para obtener la URL de la imagen correspondiente
   const getCategoryImageUrl = (categoryName: string) => {
     const name = categoryName.toLowerCase();
@@ -583,7 +613,7 @@ const CategoryItem = React.memo(({
         />
         <View style={styles.categoryOverlay} />
       </View>
-      <Text style={styles.categoryName} numberOfLines={1}>
+      <Text style={[styles.categoryName, { color: colors.text }]} numberOfLines={1}>
         {category.nombre_cat}
       </Text>
     </TouchableOpacity>
@@ -614,6 +644,11 @@ const HomeScreen = () => {
   // Estados para el usuario
   const [userData, setUserData] = useState<{ nombre?: string, email?: string } | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // Hook para el tema
+  const { colorScheme } = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const colors = getColors(isDarkMode);
    
   const router = useRouter();
   const mainScrollRef = useRef<ScrollView>(null);
@@ -1021,14 +1056,17 @@ const HomeScreen = () => {
   };
 
   return (
-  <SafeAreaView style={styles.safeArea}>
+  <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
     <Stack.Screen options={{ headerShown: false }} />
     <LinearGradient
-      colors={['#f8f8f8', '#ffffff']}
+      colors={[colors.secondaryBackground, colors.background]}
       style={styles.gradientBackground}
     >
       {/* Header fijo */}
-      <View style={styles.fixedHeader}>
+      <View style={[styles.fixedHeader, { 
+        backgroundColor: colors.headerBackground,
+        borderBottomColor: colors.border 
+      }]}>
         <View style={styles.headerContainer}>
           <TouchableOpacity onPress={() => router.push('/(tabs)')}>
             <Image 
@@ -1037,12 +1075,12 @@ const HomeScreen = () => {
               borderRadius={25}
             />
           </TouchableOpacity>
-          <View style={styles.searchContainer}>
-            <FontAwesome5 name="search" size={16} color="#666" style={styles.searchIcon} />
+          <View style={[styles.searchContainer, { backgroundColor: colors.searchBackground }]}>
+            <FontAwesome5 name="search" size={16} color={colors.secondaryText} style={styles.searchIcon} />
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: colors.searchText }]}
               placeholder="Buscar productos"
-              placeholderTextColor="#666"
+              placeholderTextColor={colors.searchPlaceholder}
               value={searchQuery}
               onChangeText={handleSearchChange}
               onFocus={() => {
@@ -1060,7 +1098,7 @@ const HomeScreen = () => {
                 }}
                 style={styles.clearButton}
               >
-                <FontAwesome5 name="times" size={16} color="#666" />
+                <FontAwesome5 name="times" size={16} color={colors.secondaryText} />
               </TouchableOpacity>
             )}
           </View>
@@ -1073,16 +1111,19 @@ const HomeScreen = () => {
           />
         </View>
         
-        {/* Resultados de búsqueda */}
+          {/* Resultados de búsqueda */}
         {showResults && (
-          <View style={styles.searchResultsContainer}>
+          <View style={[styles.searchResultsContainer, { 
+            backgroundColor: colors.card,
+            borderColor: colors.border
+          }]}>
             {isSearching ? (
               <View style={styles.loadingResults}>
-                <ActivityIndicator size="small" color="#007AFF" />
-                <Text style={styles.loadingText}>Buscando...</Text>
+                <ActivityIndicator size="small" color={colors.text} />
+                <Text style={[styles.loadingText, { color: colors.secondaryText }]}>Buscando...</Text>
               </View>
             ) : searchResults.length === 0 ? (
-              <Text style={styles.noResultsText}>
+              <Text style={[styles.noResultsText, { color: colors.secondaryText }]}>
                 {searchQuery.trim() !== '' ? 'No se encontraron productos' : ''}
               </Text>
             ) : (
@@ -1094,7 +1135,7 @@ const HomeScreen = () => {
                   
                   return (
                     <TouchableOpacity
-                      style={styles.searchResultItem}
+                      style={[styles.searchResultItem, { borderBottomColor: colors.border }]}
                       onPress={() => handleProductSelect(item)}
                     >
                       <SafeImage
@@ -1104,14 +1145,14 @@ const HomeScreen = () => {
                         imageKey={`search-${item.id}`}
                       />
                       <View style={styles.searchResultInfo}>
-                        <Text style={styles.searchResultName} numberOfLines={1}>
+                        <Text style={[styles.searchResultName, { color: colors.text }]} numberOfLines={1}>
                           {item.nombre}
                         </Text>
-                        <Text style={styles.searchResultPrice}>
+                        <Text style={[styles.searchResultPrice, { color: colors.secondaryText }]}>
                           {formatPrice(item.precio)}
                         </Text>
                       </View>
-                      <FontAwesome5 name="chevron-right" size={12} color="#999" />
+                      <FontAwesome5 name="chevron-right" size={12} color={colors.secondaryText} />
                     </TouchableOpacity>
                   );
                 }}
@@ -1120,7 +1161,7 @@ const HomeScreen = () => {
                 ListFooterComponent={
                   searchResults.length > 6 ? (
                     <TouchableOpacity
-                      style={styles.viewAllContainer}
+                      style={[styles.viewAllContainer, { borderTopColor: colors.border }]}
                       onPress={() => {
                         router.push({
                           pathname: '/(tabs)/tienda',
@@ -1173,12 +1214,12 @@ const HomeScreen = () => {
         {/* Sección de Categorías */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Categorías</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Categorías</Text>
             <TouchableOpacity onPress={() => router.push({
               pathname: '/(tabs)/tienda',
-              params: { timestamp: Date.now() } // Añadir timestamp para forzar reset
+              params: { timestamp: Date.now() }
             })}>
-              <Text style={styles.seeAll}>Ver todo</Text>
+              <Text style={[styles.seeAll, { color: colors.secondaryText }]}>Ver todo</Text>
             </TouchableOpacity>
           </View>
           {loadingCategories ? (
@@ -1229,12 +1270,12 @@ const HomeScreen = () => {
         {/* Sección de Productos */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Productos Destacados</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Productos Destacados</Text>
             <TouchableOpacity onPress={() => router.push({
               pathname: '/(tabs)/tienda',
-              params: { timestamp: Date.now() } // Añadir timestamp para forzar reset
+              params: { timestamp: Date.now() }
             })}>
-              <Text style={styles.seeAll}>Ver todo</Text>
+              <Text style={[styles.seeAll, { color: colors.secondaryText }]}>Ver todo</Text>
             </TouchableOpacity>
           </View>
           {loadingProducts ? (
@@ -1273,7 +1314,10 @@ const HomeScreen = () => {
               {infiniteProducts.map((product, index) => (
                 <TouchableOpacity 
                   key={product.key || `${product.id}-${index}`} 
-                  style={styles.productItem}
+                  style={[
+                    styles.productItem,
+                    { backgroundColor: isDarkMode ? '#3b3b3b' : '#fff' }
+                  ]}
                   onPress={() => handleProductPress(product)}
                 >
                   <SafeImage 
@@ -1284,10 +1328,10 @@ const HomeScreen = () => {
                     imageKey={`product-${product.id}`}
                   />
                   <View style={styles.productInfo}>
-                    <Text style={styles.productName} numberOfLines={1}>
+                    <Text style={[styles.productName, { color: isDarkMode ? '#fff' : '#333' }]} numberOfLines={1}>
                       {product.nombre}
                     </Text>
-                    <Text style={styles.productPrice}>
+                    <Text style={[styles.productPrice, { color: isDarkMode ? '#fff' : '#000' }]}>
                       {formatPrice(product.precio)}
                     </Text>
                   </View>

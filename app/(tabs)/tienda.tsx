@@ -25,6 +25,25 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFavoritos } from '../hooks/useFavoritos';
 import { useCart } from '../hooks/useCart';
+import { useColorScheme } from '../hooks/useColorScheme';
+
+// Add this function after your interface definitions
+const getColors = (isDark: boolean) => ({
+  background: isDark ? '#121212' : '#ffffff',
+  secondaryBackground: isDark ? '#1e1e1e' : '#f8f8f8',
+  text: isDark ? '#ffffff' : '#000000',
+  secondaryText: isDark ? '#b0b0b0' : '#666666',
+  border: isDark ? '#2c2c2c' : '#eeeeee',
+  card: isDark ? '#1e1e1e' : '#ffffff',
+  subtle: isDark ? '#2c2c2c' : '#f5f5f5',
+  headerBackground: isDark ? 'rgba(18, 18, 18, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+  searchBackground: isDark ? '#333333' : '#f5f5f5',
+  searchText: isDark ? '#ffffff' : '#333333',
+  searchPlaceholder: isDark ? '#999999' : '#666666',
+  shadow: isDark ? '#000000' : '#000000',
+  carruselBackground: isDark ? '#222222' : '#f8f8f8',
+  modalBackground: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)',
+});
 
 // Variable global para forzar recreación del componente
 let RESET_COUNTER = 0;
@@ -208,15 +227,10 @@ function TiendaScreen() {
 
   const availableSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
-
-  const themeColors = {
-    background: theme === 'light' ? '#fff' : '#181818',
-    text: theme === 'light' ? '#000' : '#fff',
-    card: theme === 'light' ? '#fff' : '#232323',
-    añadir: theme == 'light' ? '#fff' : '#fff',
-    // ...otros colores que quieras cambiar
-  };
+  // Use the color scheme hook
+  const { colorScheme } = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const colors = getColors(isDarkMode);
 
   // Animación del spinner elegante y minimalista
   useEffect(() => {
@@ -863,37 +877,63 @@ function TiendaScreen() {
   };
 
   // Spinner elegante y minimalista
-  const renderLoadingSpinner = () => {
-    if (!isLoadingAllProducts) return null;
-    
-    // Crear animación de rotación
-    const rotate = spinAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: ['0deg', '360deg']
-    });
-    
-    return (
-      <Animated.View 
-        style={[
-          styles.loadingOverlay,
-          { opacity: fadeAnim }
-        ]}
-      >
-        <View style={styles.loaderContainer}>
-          <Animated.View 
-            style={[
-              styles.spinner, 
-              { transform: [{ rotate }] }
-            ]}
+  // Spinner elegante y minimalista
+const renderLoadingSpinner = () => {
+  if (!isLoadingAllProducts) return null;
+  
+  // Crear animación de rotación
+  const rotate = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg']
+  });
+  
+  return (
+    <Animated.View 
+      style={[
+        styles.loadingOverlay,
+        { 
+          opacity: fadeAnim,
+          backgroundColor: isDarkMode ? 'rgba(18, 18, 18, 0.9)' : 'rgba(255, 255, 255, 0.9)'
+        }
+      ]}
+    >
+      <View style={[
+        styles.loaderContainer,
+        {
+          backgroundColor: isDarkMode ? '#2c2c2c' : 'white',
+          shadowColor: isDarkMode ? '#000' : '#000',
+        }
+      ]}>
+        <Animated.View 
+          style={[
+            styles.spinner, 
+            { 
+              transform: [{ rotate }],
+              borderColor: isDarkMode ? '#333333' : '#f0f0f0',
+              borderTopColor: '#CAAB8F' // Golden color works well in both modes
+            }
+          ]}
+        />
+        <View style={[
+          styles.spinnerIcon,
+          { backgroundColor: isDarkMode ? '#3c3c3c' : '#f9f9f9' }
+        ]}>
+          <FontAwesome5 
+            name="shopping-bag" 
+            size={22} 
+            color={isDarkMode ? "#e0e0e0" : "#222"} 
           />
-          <View style={styles.spinnerIcon}>
-            <FontAwesome5 name="shopping-bag" size={22} color="#222" />
-          </View>
-          <Text style={styles.loaderText}>Cargando productos</Text>
         </View>
-      </Animated.View>
-    );
-  };
+        <Text style={[
+          styles.loaderText,
+          { color: isDarkMode ? '#e0e0e0' : '#555' }
+        ]}>
+          Cargando productos
+        </Text>
+      </View>
+    </Animated.View>
+  );
+};
 
   // Componentes de UI
   const renderFilterSection = (title: string, content: React.ReactNode) => (
@@ -921,7 +961,7 @@ function TiendaScreen() {
   );
 
   const renderFilters = () => (
-    <View style={styles.filtersContainer}>
+    <View style={[styles.filtersContainer, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
       {renderFilterSection(
         'Precio',
         <View style={styles.priceRangeContainer}>
@@ -1027,7 +1067,7 @@ function TiendaScreen() {
     const imageUrl = normalizeImageUrl(item.imagen);
 
     return (
-      <View style={[styles.productCard, { backgroundColor: themeColors.card }]}>
+    <View style={[styles.productCard, { backgroundColor: colors.card }]}>
         <TouchableOpacity 
           style={styles.productImageContainer}
           onPress={() => {
@@ -1059,14 +1099,14 @@ function TiendaScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
         <View style={styles.productInfo}>
-          <Text style={[styles.productName, { color: themeColors.text }]} numberOfLines={2}>{item.nombre}</Text>
-          <Text style={[styles.productPrice, { color: themeColors.text }]}>{item.precio} €</Text>
+            <Text style={[styles.productName, { color: colors.text }]} numberOfLines={2}>{item.nombre}</Text>
+            <Text style={[styles.productPrice, { color: colors.text }]}>{item.precio} €</Text>
           <TouchableOpacity 
             style={styles.addToCartButton}
             onPress={() => handleAddToCart(item)}
           >
             <FontAwesome5 name="shopping-cart" size={16} color="#fff" />
-            <Text style={[styles.addToCartText, { color: themeColors.añadir }]}>Añadir</Text>
+            <Text style={styles.addToCartText}>Añadir</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1074,33 +1114,23 @@ function TiendaScreen() {
   };
 
   const renderHeader = () => (
-    <View style={styles.header}>
+    <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
       <TouchableOpacity 
-        style={styles.backButton}
+        style={[styles.backButton, { backgroundColor: colors.subtle }]}
         onPress={handleBackToGenderSelection}
       >
-        <FontAwesome5 name="arrow-left" size={18} color="#333" />
+        <FontAwesome5 name="arrow-left" size={18} color={colors.secondaryText} />
       </TouchableOpacity>
-      <Text style={[styles.sectionTitle, { color: themeColors.text }]}>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>
         {selectedCategoryName 
           ? `${selectedCategoryName} ${selectedGender === 'hombre' ? 'Hombre' : 'Mujer'}` 
           : selectedGender === 'hombre' ? 'Colección Hombre' : 'Colección Mujer'}
       </Text>
       <TouchableOpacity 
-        style={[styles.filterButton, showFilters && styles.filterButtonActive]}
+        style={[styles.filterButton, showFilters && styles.filterButtonActive, { backgroundColor: colors.subtle }]}
         onPress={() => setShowFilters(!showFilters)}
       >
-        <FontAwesome5 name="filter" size={20} color={showFilters ? "#007bff" : "#333"} />
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.filterButton, { marginLeft: 10 }]}
-        onPress={toggleTheme}
-      >
-        <FontAwesome5 
-          name={theme === 'light' ? "moon" : "sun"} 
-          size={20} 
-          color={theme === 'light' ? "#333" : "#FFD700"} 
-        />
+        <FontAwesome5 name="filter" size={20} color={showFilters ? "#007bff" : colors.secondaryText} />
       </TouchableOpacity>
     </View>
   );
@@ -1116,18 +1146,14 @@ function TiendaScreen() {
     }, 100); // Pequeño delay para UX
   };
 
-  const toggleTheme = () => {
-    setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
-  };
-
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar
-        barStyle={theme === 'light' ? 'dark-content' : 'light-content'}
-        backgroundColor={themeColors.background}
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.background}
       />
       <LinearGradient
-        colors={theme === 'light' ? ['#ffffff', '#f8f8f8'] : ['#232526', '#1c1c1c']}
+        colors={isDarkMode ? ['#232526', '#1c1c1c'] : ['#ffffff', '#f8f8f8']}
         style={styles.gradientBackground}
       >
         {/* Toast personalizado */}
@@ -1138,25 +1164,25 @@ function TiendaScreen() {
         
         {!selectedGender ? (
           <View style={styles.genderSelection}>
-            <Text style={styles.title}>
+            <Text style={[styles.title, { color: colors.text }]}>
               {selectedCategoryName 
                 ? `Selecciona género para ${selectedCategoryName}` 
                 : 'Selecciona tu género'}
             </Text>
             <View style={styles.genderButtons}>
               <TouchableOpacity 
-                style={styles.genderButton}
+                style={[styles.genderButton, { backgroundColor: colors.card }]}
                 onPress={() => handleGenderSelect('hombre')}
               >
-                <FontAwesome5 name="male" size={40} color="#333" />
-                <Text style={styles.genderText}>Hombre</Text>
+                <FontAwesome5 name="male" size={40} color={colors.secondaryText} />
+                <Text style={[styles.genderText, { color: colors.text }]}>Hombre</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.genderButton}
+                style={[styles.genderButton, { backgroundColor: colors.card }]}
                 onPress={() => handleGenderSelect('mujer')}
               >
-                <FontAwesome5 name="female" size={40} color="#333" />
-                <Text style={styles.genderText}>Mujer</Text>
+                <FontAwesome5 name="female" size={40} color={colors.secondaryText} />
+                <Text style={[styles.genderText, { color: colors.text }]}>Mujer</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1164,12 +1190,12 @@ function TiendaScreen() {
           <View style={styles.productsContainer}>
             {renderHeader()}
 
-            <View style={styles.searchBarContainer}>
-              <FontAwesome5 name="search" size={16} color="#666" style={styles.searchIcon} />
+            <View style={[styles.searchBarContainer, { backgroundColor: colors.searchBackground }]}>
+              <FontAwesome5 name="search" size={16} color={colors.secondaryText} style={styles.searchIcon} />
               <TextInput
-                style={styles.searchInput}
+                style={[styles.searchInput, { color: colors.searchText }]}
                 placeholder="Buscar productos..."
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.searchPlaceholder}
                 value={searchQuery}
                 onChangeText={handleSearch}
                 onSubmitEditing={handleSearchSubmit}

@@ -25,6 +25,7 @@ import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFavoritos } from './hooks/useFavoritos';
 import { useCart } from './hooks/useCart';
+import { useColorScheme } from './hooks/useColorScheme'; // Import color scheme hook
 
 interface ProductImage {
   id: string | number;
@@ -53,12 +54,36 @@ interface SearchResult extends Product {
   imagen_url?: string;
 }
 
-// Interfaz para los Toasts personalizados
+// Interface for custom Toasts
 interface ToastMessage {
   message: string;
   type: 'success' | 'error' | 'warning' | 'info';
   icon?: string;
 }
+
+// Add color theme function
+const getColors = (isDark: boolean) => ({
+  background: isDark ? '#121212' : '#FFFFFF',
+  cardBackground: isDark ? '#1e1e1e' : '#FFFFFF',
+  text: isDark ? '#FFFFFF' : '#000000',
+  secondaryText: isDark ? '#B0B0B0' : '#666666',
+  border: isDark ? '#2c2c2c' : '#EEEEEE',
+  inputBackground: isDark ? '#333333' : '#F7F7F7',
+  primaryButton: isDark ? '#FFFFFF' : '#000000',
+  primaryButtonText: isDark ? '#000000' : '#FFFFFF',
+  searchBackground: isDark ? '#333333' : '#f7f7f7',
+  cardBorder: isDark ? '#333333' : '#F2F2F2',
+  headerBackground: isDark ? '#121212' : '#FFFFFF',
+  bottomPanelBackground: isDark ? '#1A1A1A' : '#FFFFFF',
+  iconColor: isDark ? '#FFFFFF' : '#000000',
+  quantityBorder: isDark ? '#555555' : '#E5E5E5',
+  searchPlaceholder: isDark ? '#999999' : '#999999',
+  resultItemBorder: isDark ? '#333333' : '#f0f0f0',
+  resultBackground: isDark ? '#242424' : 'white',
+  viewAllBackground: isDark ? '#242424' : '#fafafa',
+  statusBarStyle: isDark ? 'light' : 'dark',
+  ratingStarColor: isDark ? '#FFCC33' : '#000000'
+});
 
 const { width, height } = Dimensions.get('window');
 const API_BASE_URL = 'https://ohanatienda.ddns.net';
@@ -128,7 +153,12 @@ const ProductDetail = () => {
   const carouselRef = useRef<FlatList | null>(null);
   const router = useRouter();
   
-  // Estados para la búsqueda
+  // Get color scheme
+  const { colorScheme } = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  const colors = getColors(isDarkMode);
+  
+  // States for search
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -137,36 +167,36 @@ const ProductDetail = () => {
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<TextInput>(null);
   
-  // Estados para el toast personalizado
+  // States for custom toast
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastAnimation = useRef(new Animated.Value(0)).current;
   const toastTimeout = useRef<NodeJS.Timeout | number | null>(null);
   
-  // Usar el hook de favoritos
+  // Use favorites hook
   const { favoritos, loading: loadingFavoritos, esFavorito, toggleFavorito, recargarFavoritos } = useFavoritos();
   
-  // Usar el hook del carrito y obtener el número de items en el carrito
+  // Use cart hook and get item count
   const { addToCart, refreshLoginStatus, cartItems } = useCart();
   const cartItemCount = cartItems ? cartItems.reduce((total, item) => total + item.cantidad, 0) : 0;
   
-  // Función para mostrar un toast personalizado
+  // Function to show custom toast
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'warning' | 'info', icon?: string) => {
-    // Limpiar cualquier timeout existente
+    // Clear existing timeout
     if (toastTimeout.current) {
       clearTimeout(toastTimeout.current);
     }
     
-    // Establecer el nuevo mensaje
+    // Set new message
     setToast({ message, type, icon });
     
-    // Animar la entrada del toast
+    // Animate toast entry
     Animated.timing(toastAnimation, {
       toValue: 1,
       duration: 300,
       useNativeDriver: true,
     }).start();
     
-    // Configurar el timeout para ocultar el toast
+    // Set timeout to hide toast
     toastTimeout.current = setTimeout(() => {
       Animated.timing(toastAnimation, {
         toValue: 0,
@@ -176,7 +206,7 @@ const ProductDetail = () => {
     }, 2000);
   }, [toastAnimation]);
   
-  // Función para buscar productos
+  // Function to search products
   const searchProducts = async (query: string) => {
     if (!query || query.trim() === '') {
       setSearchResults([]);
@@ -188,7 +218,7 @@ const ProductDetail = () => {
     setShowResults(true);
     
     try {
-      // Busca tanto en productos de Hombre como de mujer
+      // Search in all products
       const response = await axios.get(`${API_BASE_URL}/api/productos/buscar?q=${encodeURIComponent(query)}`);
       
       if (response.data && Array.isArray(response.data)) {
@@ -204,7 +234,7 @@ const ProductDetail = () => {
       console.error('Error searching products:', error);
       setSearchResults([]);
       
-      // Mostrar mensaje al usuario
+      // Show error message
       Alert.alert(
         "Error de búsqueda",
         "No se pudo conectar con el servidor. Por favor, intenta más tarde.",
@@ -215,25 +245,24 @@ const ProductDetail = () => {
     }
   };
 
-  // Función para manejar la navegación al seleccionar un producto desde búsqueda
+  // Handle product selection from search
   const handleProductSelect = (product: SearchResult) => {
     Keyboard.dismiss();
     setShowResults(false);
     setSearchQuery('');
     setShowSearchBar(false);
     
-    // Navegar a la página de detalles del producto
+    // Navigate to product details
     router.push({
       pathname: '/detalles',
       params: { id: product.id.toString() }
     });
   };
   
-  // Función para manejar cambios en la búsqueda con debounce
+  // Handle search with debounce
   const handleSearchChange = (text: string) => {
     setSearchQuery(text);
     
-    // Debounce para evitar llamadas API excesivas
     if (searchTimeout.current) {
       clearTimeout(searchTimeout.current);
     }
@@ -243,7 +272,7 @@ const ProductDetail = () => {
     }, 300);
   };
   
-  // Cerrar resultados al hacer clic fuera
+  // Close results when tapping outside
   const handlePressOutside = () => {
     Keyboard.dismiss();
     setShowResults(false);
@@ -251,7 +280,7 @@ const ProductDetail = () => {
     setSearchQuery('');
   };
   
-  // Limpiar el timeout al desmontar
+  // Clean up timeouts on unmount
   useEffect(() => {
     return () => {
       if (searchTimeout.current) {
@@ -264,7 +293,7 @@ const ProductDetail = () => {
     };
   }, []);
   
-  // Funciones para los iconos del header
+  // Header icon functions
   const navigateToSearch = () => {
     setShowSearchBar(true);
     setTimeout(() => {
@@ -290,7 +319,7 @@ const ProductDetail = () => {
     router.push('/(tabs)/carrito');
   };
 
-  // Verificar si el usuario está logueado
+  // Check if user is logged in
   const checkLoginStatus = async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
@@ -300,14 +329,13 @@ const ProductDetail = () => {
     }
   };
 
-  // Comprobar si el producto es favorito al cargar
+  // Check if product is favorite when loading
   useEffect(() => {
     const checkIsFavorite = async () => {
       if (id && !isNaN(Number(id))) {
         const productId = Number(id);
         const isFav = favoritos.includes(productId);
         console.log(`Producto ${productId} es favorito: ${isFav}`);
-        // No necesitamos esperar a AsyncStorage gracias al hook
       }
     };
 
@@ -316,10 +344,9 @@ const ProductDetail = () => {
     }
   }, [id, favoritos, loadingFavoritos]);
 
-  // Obtener detalles del producto
+  // Get product details
   useEffect(() => {
     checkLoginStatus();
-    // Recargar favoritos al entrar en la página
     recargarFavoritos();
     
     const fetchProductDetails = async () => {
@@ -340,42 +367,42 @@ const ProductDetail = () => {
     }
   }, [id, recargarFavoritos]);
 
-  // Verificar el estado de inicio de sesión cuando se monta el componente
+  // Check login status on component mount
   useEffect(() => {
     refreshLoginStatus();
   }, []);
 
-  // Preparar imágenes para el carrusel
+  // Prepare images for carousel
   const getAllImages = () => {
     if (!product) return [];
 
-    // Imagen principal siempre al inicio
+    // Main image always first
     const mainImageUrl = normalizeImageUrl(product.imagen);
     const mainImage = { 
       id: 'main',
       url: mainImageUrl
     };
     
-    // Si hay imágenes adicionales, agregarlas
+    // Add additional images if they exist
     let additionalImages: ProductImage[] = [];
     
     if (product.imagenes && Array.isArray(product.imagenes) && product.imagenes.length > 0) {
       additionalImages = product.imagenes.map((img: any, index: number) => {
-        // Comprobamos si la imagen tiene el formato del backend (con campo 'ruta')
+        // Check if image has backend format (with 'ruta' field)
         if (img && img.ruta) {
           return {
             id: img.id || `carousel-${img.orden || index}`,
             url: normalizeImageUrl(img.ruta)
           };
         } 
-        // Si ya tiene el formato del frontend (con campo 'url')
+        // If it already has frontend format (with 'url' field)
         else if (img && img.url) {
           return {
             id: img.id || `carousel-${index}`,
             url: normalizeImageUrl(img.url)
           };
         }
-        // Si es solo un string (url directa)
+        // If it's just a string (direct url)
         else if (typeof img === 'string') {
           return {
             id: `img-${Math.random().toString(36).substr(2, 9)}`,
@@ -386,13 +413,13 @@ const ProductDetail = () => {
       }).filter(img => img !== null);
     }
     
-    // Para el carrusel necesitamos al menos varias imágenes
+    // For carousel we need at least several images
     let carouselImages;
     
     if (additionalImages.length > 0) {
       carouselImages = [mainImage, ...additionalImages];
     } else {
-      // Si no hay imágenes adicionales, duplicar la principal
+      // If no additional images, duplicate the main one
       carouselImages = [
         mainImage,
         { id: 'duplicate-1', url: mainImageUrl },
@@ -429,7 +456,6 @@ const ProductDetail = () => {
   const handleAddToCart = async () => {
     if (!product) return;
     
-    // Actualizar el estado de inicio de sesión antes de intentar añadir al carrito
     await refreshLoginStatus();
     
     const success = await addToCart({
@@ -438,7 +464,7 @@ const ProductDetail = () => {
       precio: product.precio,
       imagen: product.imagen,
       talla: product.talla,
-      cantidad: quantity // Esta es la cantidad seleccionada
+      cantidad: quantity
     });
 
     if (!success) {
@@ -449,7 +475,6 @@ const ProductDetail = () => {
       return;
     }
     
-    // Mensaje de éxito con toast personalizado
     showToast(
       `${quantity} ${quantity > 1 ? 'unidades' : 'unidad'} añadidas al carrito`, 
       'success', 
@@ -467,10 +492,8 @@ const ProductDetail = () => {
     }
     
     showToast('¡Preparando tu compra!', 'info', 'card');
-    // Aquí iría la lógica para proceder al pago
   };
 
-  // Función actualizada para manejar favoritos con el hook
   const handleToggleFavorite = async () => {
     if (!product) return;
     
@@ -483,7 +506,6 @@ const ProductDetail = () => {
         return;
       }
       
-      // Verificar si tenemos un userId antes de intentar modificar favoritos
       const userDataStr = await AsyncStorage.getItem('userData');
       if (!userDataStr) {
         throw new Error('No se pudo identificar al usuario');
@@ -491,10 +513,8 @@ const ProductDetail = () => {
       
       const isFavorite = favoritos.includes(product.id);
       
-      // Usar el hook para manejar favoritos
       await toggleFavorito(product.id);
       
-      // Mensaje de éxito
       if (isFavorite) {
         showToast('Eliminado de favoritos', 'info', 'heart-outline');
       } else {
@@ -507,7 +527,7 @@ const ProductDetail = () => {
     }
   };
 
-  // Limitar la cantidad a un máximo de 5 unidades
+  // Limit quantity to maximum of 5 units
   const increaseQuantity = () => {
     if (quantity < 5) {
       setQuantity(prev => prev + 1);
@@ -518,10 +538,10 @@ const ProductDetail = () => {
   
   const decreaseQuantity = () => setQuantity(prev => prev > 1 ? prev - 1 : 1);
 
-  // Verificar si el producto actual es favorito
+  // Check if current product is favorite
   const productIsFavorite = product ? favoritos.includes(product.id) : false;
 
-  // Componente Toast personalizado
+  // Custom Toast component
   const renderToast = () => {
     if (!toast) return null;
     
@@ -530,10 +550,10 @@ const ProductDetail = () => {
       outputRange: [-100, 0],
     });
     
-    // Determinar color de fondo según tipo
-    let backgroundColor = '#4CAF50'; // success - verde
+    // Determine background color based on type
+    let backgroundColor = '#4CAF50'; // success - green
 
-    // Solo permitir iconos válidos de Ionicons
+    // Only allow valid Ionicons names
     type IoniconName =
       | 'checkmark-circle'
       | 'close-circle'
@@ -550,17 +570,17 @@ const ProductDetail = () => {
     let iconName: IoniconName = 'checkmark-circle';
 
     if (toast.type === 'error') {
-      backgroundColor = '#F44336'; // rojo
+      backgroundColor = '#F44336'; // red
       iconName = 'close-circle';
     } else if (toast.type === 'warning') {
-      backgroundColor = '#FF9800'; // naranja
+      backgroundColor = '#FF9800'; // orange
       iconName = 'warning';
     } else if (toast.type === 'info') {
-      backgroundColor = '#2196F3'; // azul
+      backgroundColor = '#2196F3'; // blue
       iconName = 'information-circle';
     }
 
-    // Si toast.icon es uno de los permitidos, úsalo
+    // If toast.icon is one of the allowed ones, use it
     const allowedIcons: IoniconName[] = [
       'checkmark-circle',
       'close-circle',
@@ -606,22 +626,26 @@ const ProductDetail = () => {
         }} 
       />
       
-      <SafeAreaView style={styles.container}>
-        <StatusBar style="dark" />
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        {/* Use dynamic statusbar style based on theme */}
+        <StatusBar style={isDarkMode ? "light" : "dark"} />
         
-        {/* Renderizar el toast personalizado */}
+        {/* Custom toast */}
         {renderToast()}
         
-        {/* Header minimalista */}
-        <View style={styles.header}>
+        {/* Header */}
+        <View style={[styles.header, { backgroundColor: colors.headerBackground, borderBottomColor: colors.border }]}>
           {showSearchBar ? (
-            <View style={styles.searchContainer}>
-              <Feather name="search" size={18} color="#666" style={styles.searchIcon} />
+            <View style={[styles.searchContainer, { 
+              backgroundColor: colors.searchBackground,
+              borderColor: colors.border 
+            }]}>
+              <Feather name="search" size={18} color={colors.secondaryText} style={styles.searchIcon} />
               <TextInput
                 ref={searchInputRef}
-                style={styles.searchInput}
+                style={[styles.searchInput, { color: colors.text }]}
                 placeholder="Buscar en Ohana..."
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.searchPlaceholder}
                 value={searchQuery}
                 onChangeText={handleSearchChange}
                 autoFocus
@@ -637,7 +661,7 @@ const ProductDetail = () => {
                   style={styles.clearButton}
                   hitSlop={{top: 10, right: 10, bottom: 10, left: 10}}
                 >
-                  <Feather name="x" size={18} color="#999" />
+                  <Feather name="x" size={18} color={colors.secondaryText} />
                 </TouchableOpacity>
               )}
               <TouchableOpacity 
@@ -657,7 +681,7 @@ const ProductDetail = () => {
                 style={styles.backButtonContainer} 
                 onPress={() => router.back()}
               >
-                <Ionicons name="chevron-back" size={24} color="#000" />
+                <Ionicons name="chevron-back" size={24} color={colors.iconColor} />
               </TouchableOpacity>
               
               <View style={styles.headerRightButtons}>
@@ -665,7 +689,7 @@ const ProductDetail = () => {
                   style={styles.iconButton}
                   onPress={navigateToSearch}
                 >
-                  <Feather name="search" size={20} color="#000" />
+                  <Feather name="search" size={20} color={colors.iconColor} />
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
@@ -675,7 +699,7 @@ const ProductDetail = () => {
                   <Feather 
                     name="heart" 
                     size={20} 
-                    color={productIsFavorite ? "#FF3B30" : "#000"} 
+                    color={productIsFavorite ? "#FF3B30" : colors.iconColor} 
                   />
                 </TouchableOpacity>
                 
@@ -683,7 +707,7 @@ const ProductDetail = () => {
                   style={styles.iconButton}
                   onPress={navigateToCart}
                 >
-                  <Feather name="shopping-bag" size={20} color="#000" />
+                  <Feather name="shopping-bag" size={20} color={colors.iconColor} />
                   {isLoggedIn && cartItemCount > 0 && (
                     <View style={styles.cartBadge}>
                       <Text style={styles.cartBadgeText}>{cartItemCount}</Text>
@@ -695,14 +719,16 @@ const ProductDetail = () => {
           )}
         </View>
 
-        {/* Resultados de búsqueda con diseño mejorado */}
+        {/* Search results */}
         {showResults && (
-          <View style={styles.searchResultsContainer}>
-            {/* Indicador visual para mejorar la UI */}
+          <View style={[styles.searchResultsContainer, {
+            backgroundColor: colors.cardBackground,
+            borderColor: colors.border
+          }]}>
             <View style={{
               width: 36, 
               height: 4,
-              backgroundColor: '#e0e0e0',
+              backgroundColor: isDarkMode ? '#444444' : '#e0e0e0',
               borderRadius: 2,
               alignSelf: 'center',
               marginTop: 8,
@@ -711,20 +737,29 @@ const ProductDetail = () => {
             
             {isSearching ? (
               <View style={styles.loadingResults}>
-                <ActivityIndicator size="small" color="#007AFF" />
-                <Text style={styles.loadingText}>Buscando productos...</Text>
+                <ActivityIndicator size="small" color={isDarkMode ? "#4D90FE" : "#007AFF"} />
+                <Text style={[styles.loadingText, { color: colors.secondaryText }]}>
+                  Buscando productos...
+                </Text>
               </View>
             ) : searchResults.length === 0 ? (
-              <Text style={styles.noResultsText}>
+              <Text style={[styles.noResultsText, { color: colors.secondaryText }]}>
                 {searchQuery.trim() !== '' ? 'No encontramos productos que coincidan con tu búsqueda' : ''}
               </Text>
             ) : (
               <FlatList
-                data={searchResults.slice(0, 6)} // Mostrar máximo 6 resultados
+                data={searchResults.slice(0, 6)}
                 keyExtractor={(item) => item.id.toString()}
                 renderItem={({ item }) => (
                   <TouchableOpacity
-                    style={[styles.searchResultItem, {marginHorizontal: 4}]}
+                    style={[
+                      styles.searchResultItem, 
+                      { 
+                        marginHorizontal: 4,
+                        borderBottomColor: colors.resultItemBorder,
+                        backgroundColor: colors.resultBackground
+                      }
+                    ]}
                     onPress={() => handleProductSelect(item)}
                     activeOpacity={0.7}
                   >
@@ -738,14 +773,14 @@ const ProductDetail = () => {
                       }}
                     />
                     <View style={styles.searchResultInfo}>
-                      <Text style={styles.searchResultName} numberOfLines={1}>
+                      <Text style={[styles.searchResultName, { color: colors.text }]} numberOfLines={1}>
                         {item.nombre}
                       </Text>
-                      <Text style={styles.searchResultPrice}>
+                      <Text style={[styles.searchResultPrice, { color: colors.secondaryText }]}>
                         {formatPrice(item.precio)}
                       </Text>
                     </View>
-                    <Feather name="chevron-right" size={16} color="#bbb" />
+                    <Feather name="chevron-right" size={16} color={colors.secondaryText} />
                   </TouchableOpacity>
                 )}
                 style={styles.searchResultsList}
@@ -755,7 +790,7 @@ const ProductDetail = () => {
                 ListFooterComponent={
                   searchResults.length > 6 ? (
                     <TouchableOpacity
-                      style={styles.viewAllContainer}
+                      style={[styles.viewAllContainer, { backgroundColor: colors.viewAllBackground }]}
                       onPress={() => {
                         router.push({
                           pathname: '/(tabs)/tienda',
@@ -782,7 +817,7 @@ const ProductDetail = () => {
           </View>
         )}
 
-        {/* Overlay para cerrar resultados al hacer clic fuera */}
+        {/* Overlay for closing search results */}
         {showResults && (
           <Pressable
             style={styles.overlay}
@@ -791,33 +826,36 @@ const ProductDetail = () => {
         )}
 
         {loading || loadingFavoritos ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#000" />
-            <Text style={styles.loadingText}>Cargando producto...</Text>
+          <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+            <ActivityIndicator size="small" color={colors.text} />
+            <Text style={[styles.loadingText, { color: colors.secondaryText }]}>Cargando producto...</Text>
           </View>
         ) : error || !product ? (
-          <View style={styles.errorContainer}>
-            <Feather name="alert-circle" size={44} color="#000" />
-            <Text style={styles.errorText}>{error || 'No se encontró el producto'}</Text>
+          <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
+            <Feather name="alert-circle" size={44} color={colors.text} />
+            <Text style={[styles.errorText, { color: colors.secondaryText }]}>
+              {error || 'No se encontró el producto'}
+            </Text>
             <TouchableOpacity 
-              style={styles.backButton} 
+              style={[styles.backButton, { backgroundColor: colors.primaryButton }]} 
               onPress={() => router.back()}
             >
-              <Text style={styles.backButtonText}>Volver</Text>
+              <Text style={[styles.backButtonText, { color: colors.primaryButtonText }]}>Volver</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
             <ScrollView 
-              style={styles.scrollView}
+              style={[styles.scrollView, { backgroundColor: colors.background }]}
               showsVerticalScrollIndicator={false}
               onScrollBeginDrag={() => {
                 Keyboard.dismiss();
                 setShowResults(false);
               }}
+              contentContainerStyle={{ paddingBottom: 120 }} // Extra space for bottom panel
             >
-              {/* Carrusel de imágenes elegante */}
-              <View style={styles.carouselContainer}>
+              {/* Image carousel */}
+              <View style={[styles.carouselContainer, { backgroundColor: colors.background }]}>
                 <FlatList
                   ref={carouselRef}
                   data={getAllImages()}
@@ -836,7 +874,7 @@ const ProductDetail = () => {
                     setActiveIndex(slideIndex);
                   }}
                   renderItem={({ item }) => (
-                    <View style={styles.imageSlide}>
+                    <View style={[styles.imageSlide, { backgroundColor: colors.background }]}>
                       <Image 
                         source={item.url ? { uri: item.url } : DEFAULT_IMAGE}
                         style={styles.productImage}
@@ -853,14 +891,15 @@ const ProductDetail = () => {
                   )}
                 />
                 
-                {/* Indicadores del carrusel */}
+                {/* Carousel indicators */}
                 <View style={styles.paginationContainer}>
                   {getAllImages().map((_, index) => (
                     <TouchableOpacity 
                       key={index}
                       style={[
                         styles.paginationDot,
-                        activeIndex === index && styles.paginationDotActive
+                        { backgroundColor: isDarkMode ? '#555555' : '#DDDDDD' },
+                        activeIndex === index && { backgroundColor: isDarkMode ? '#FFFFFF' : '#000000' }
                       ]}
                       onPress={() => handleThumbnailPress(index)}
                     />
@@ -868,20 +907,24 @@ const ProductDetail = () => {
                 </View>
               </View>
 
-              {/* Información del producto con estilo de moda */}
-              <View style={styles.productInfoSection}>
-                {/* Categoría */}
-                <Text style={styles.categoryLabel}>
+              {/* Product info */}
+              <View style={[styles.productInfoSection, { backgroundColor: colors.background }]}>
+                {/* Category */}
+                <Text style={[styles.categoryLabel, { color: colors.secondaryText }]}>
                   {product.categoria.nombre_cat} / {product.tipo}
                 </Text>
                 
-                {/* Nombre del producto */}
-                <Text style={styles.productName}>{product.nombre}</Text>
+                {/* Product name */}
+                <Text style={[styles.productName, { color: colors.text }]}>
+                  {product.nombre}
+                </Text>
                 
-                {/* Precio */}
-                <Text style={styles.productPrice}>{formatPrice(product.precio)}</Text>
+                {/* Price */}
+                <Text style={[styles.productPrice, { color: colors.text }]}>
+                  {formatPrice(product.precio)}
+                </Text>
                 
-                {/* Valoraciones */}
+                {/* Ratings */}
                 <View style={styles.ratingsRow}>
                   <View style={styles.starsContainer}>
                     {[1, 2, 3, 4, 5].map(star => (
@@ -889,135 +932,215 @@ const ProductDetail = () => {
                         key={star} 
                         name={star <= 4 ? "star" : "star-o"} 
                         size={14} 
-                        color="#000"
+                        color={isDarkMode ? "#FFCC33" : "#000"}
                         style={{marginRight: 2}} 
                       />
                     ))}
                   </View>
-                  <Text style={styles.ratingCount}>432 valoraciones</Text>
+                  <Text style={[styles.ratingCount, { color: colors.secondaryText }]}>
+                    432 valoraciones
+                  </Text>
                 </View>
                 
-                {/* Selector de cantidad */}
+                {/* Quantity selector */}
                 <View style={styles.quantitySection}>
-                  <Text style={styles.sectionLabel}>Cantidad (máx. 5)</Text>
-                  <View style={styles.quantityControls}>
+                  <Text style={[styles.sectionLabel, { color: colors.text }]}>
+                    Cantidad (máx. 5)
+                  </Text>
+                  <View style={[
+                    styles.quantityControls, 
+                    { borderColor: colors.quantityBorder }
+                  ]}>
                     <TouchableOpacity 
                       style={[styles.quantityButton, quantity === 1 && styles.quantityButtonDisabled]}
                       onPress={decreaseQuantity}
                       disabled={quantity === 1}
                     >
-                      <Feather name="minus" size={16} color={quantity === 1 ? "#ccc" : "#000"} />
+                      <Feather 
+                        name="minus" 
+                        size={16} 
+                        color={quantity === 1 ? 
+                          (isDarkMode ? "#666666" : "#ccc") : 
+                          colors.text
+                        } 
+                      />
                     </TouchableOpacity>
                     
-                    <Text style={styles.quantityValueText}>{quantity}</Text>
+                    <Text style={[styles.quantityValueText, { color: colors.text }]}>
+                      {quantity}
+                    </Text>
                     
                     <TouchableOpacity 
                       style={[styles.quantityButton, quantity === 5 && styles.quantityButtonDisabled]}
                       onPress={increaseQuantity}
                       disabled={quantity === 5}
                     >
-                      <Feather name="plus" size={16} color={quantity === 5 ? "#ccc" : "#000"} />
+                      <Feather 
+                        name="plus" 
+                        size={16} 
+                        color={quantity === 5 ? 
+                          (isDarkMode ? "#666666" : "#ccc") : 
+                          colors.text
+                        }
+                      />
                     </TouchableOpacity>
                   </View>
                 </View>
                 
-                {/* Tallas */}
+                {/* Size */}
                 {product.talla && (
                   <View style={styles.sizeSection}>
-                    <Text style={styles.sectionLabel}>Talla</Text>
-                    <View style={styles.sizeChip}>
-                      <Text style={styles.sizeText}>{product.talla}</Text>
+                    <Text style={[styles.sectionLabel, { color: colors.text }]}>Talla</Text>
+                    <View style={[styles.sizeChip, { borderColor: colors.quantityBorder }]}>
+                      <Text style={[styles.sizeText, { color: colors.text }]}>
+                        {product.talla}
+                      </Text>
                     </View>
                   </View>
                 )}
                 
-                {/* Disponibilidad */}
+                {/* Availability */}
                 <View style={styles.availabilitySection}>
                   <View style={styles.availabilityIndicator} />
-                  <Text style={styles.availabilityText}>Disponible - Entrega en 2-4 días</Text>
+                  <Text style={[styles.availabilityText, { color: colors.secondaryText }]}>
+                    Disponible - Entrega en 2-4 días
+                  </Text>
                 </View>
                 
-                {/* Descripción */}
-                <View style={styles.descriptionSection}>
-                  <Text style={styles.sectionLabel}>Detalles del producto</Text>
-                  <Text style={styles.descriptionText}>
+                {/* Description */}
+                <View style={[
+                  styles.descriptionSection, 
+                  { borderTopColor: colors.cardBorder }
+                ]}>
+                  <Text style={[styles.sectionLabel, { color: colors.text }]}>
+                    Detalles del producto
+                  </Text>
+                  <Text style={[styles.descriptionText, { color: colors.secondaryText }]}>
                     {product.descripcion || "No hay descripción disponible para este producto."}
                   </Text>
                 </View>
                 
-                {/* Detalles adicionales */}
-                <View style={styles.additionalInfoSection}>
+                {/* Additional details */}
+                <View style={[
+                  styles.additionalInfoSection, 
+                  { borderTopColor: colors.cardBorder }
+                ]}>
                   <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Material:</Text>
-                    <Text style={styles.infoValue}>100% Algodón</Text>
+                    <Text style={[styles.infoLabel, { color: colors.secondaryText }]}>Material:</Text>
+                    <Text style={[styles.infoValue, { color: colors.text }]}>100% Algodón</Text>
                   </View>
                   
                   <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Referencia:</Text>
-                    <Text style={styles.infoValue}>{product.id}</Text>
+                    <Text style={[styles.infoLabel, { color: colors.secondaryText }]}>Referencia:</Text>
+                    <Text style={[styles.infoValue, { color: colors.text }]}>{product.id}</Text>
                   </View>
                   
                   {product.tipo && (
                     <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Tipo:</Text>
-                      <Text style={styles.infoValue}>{product.tipo}</Text>
+                      <Text style={[styles.infoLabel, { color: colors.secondaryText }]}>Tipo:</Text>
+                      <Text style={[styles.infoValue, { color: colors.text }]}>{product.tipo}</Text>
                     </View>
                   )}
                 </View>
                 
-                {/* Envío */}
-                <View style={styles.shippingSection}>
-                  <Text style={styles.sectionLabel}>Envío y devoluciones</Text>
+                {/* Shipping info */}
+                <View style={[
+                  styles.shippingSection, 
+                  { borderTopColor: colors.cardBorder }
+                ]}>
+                  <Text style={[styles.sectionLabel, { color: colors.text }]}>
+                    Envío y devoluciones
+                  </Text>
                   
                   <View style={styles.shippingInfoRow}>
-                    <Feather name="truck" size={16} color="#555" style={{marginRight: 12}} />
+                    <Feather 
+                      name="truck" 
+                      size={16} 
+                      color={colors.secondaryText} 
+                      style={{marginRight: 12}} 
+                    />
                     <View>
-                      <Text style={styles.shippingInfoTitle}>Envío gratuito</Text>
-                      <Text style={styles.shippingInfoDescription}>En pedidos superiores a 50€</Text>
+                      <Text style={[styles.shippingInfoTitle, { color: colors.text }]}>
+                        Envío gratuito
+                      </Text>
+                      <Text style={[styles.shippingInfoDescription, { color: colors.secondaryText }]}>
+                        En pedidos superiores a 50€
+                      </Text>
                     </View>
                   </View>
                   
                   <View style={styles.shippingInfoRow}>
-                    <Feather name="refresh-cw" size={16} color="#555" style={{marginRight: 12}} />
+                    <Feather 
+                      name="refresh-cw" 
+                      size={16} 
+                      color={colors.secondaryText} 
+                      style={{marginRight: 12}} 
+                    />
                     <View>
-                      <Text style={styles.shippingInfoTitle}>Devoluciones gratuitas</Text>
-                      <Text style={styles.shippingInfoDescription}>Tienes 30 días para devolver el producto</Text>
+                      <Text style={[styles.shippingInfoTitle, { color: colors.text }]}>
+                        Devoluciones gratuitas
+                      </Text>
+                      <Text style={[styles.shippingInfoDescription, { color: colors.secondaryText }]}>
+                        Tienes 30 días para devolver el producto
+                      </Text>
                     </View>
                   </View>
                 </View>
-                
-                {/* Espacio para los botones fijos */}
-                <View style={{height: 100}} />
               </View>
             </ScrollView>
             
-            {/* Panel fijo de compra con estilo de moda */}
-            <View style={styles.bottomActionPanel}>
-              <TouchableOpacity
-                style={styles.favoriteButton}
-                onPress={handleToggleFavorite}
-              >
-                <Ionicons 
-                  name={productIsFavorite ? "heart" : "heart-outline"} 
-                  size={24} 
-                  color={productIsFavorite ? "#ff4444" : "#000"} 
-                />
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.addToCartButton}
-                onPress={handleAddToCart}
-              >
-                <Text style={styles.addToCartText}>Añadir al carrito</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.shareButton}
-                onPress={handleShare}
-              >
-                <Ionicons name="share-outline" size={24} color="#000" />
-              </TouchableOpacity>
-            </View>
+            {/* Fixed bottom action panel with SafeAreaView */}
+            <SafeAreaView 
+              edges={['bottom']} 
+              style={[
+                styles.bottomActionPanelContainer, 
+                { backgroundColor: colors.bottomPanelBackground }
+              ]}
+            >
+              <View style={[
+                styles.bottomActionPanel, 
+                { 
+                  backgroundColor: colors.bottomPanelBackground,
+                  borderTopColor: colors.border 
+                }
+              ]}>
+                <TouchableOpacity
+                  style={[styles.favoriteButton, { borderColor: colors.border }]}
+                  onPress={handleToggleFavorite}
+                >
+                  <Ionicons 
+                    name={productIsFavorite ? "heart" : "heart-outline"} 
+                    size={24} 
+                    color={productIsFavorite ? "#ff4444" : colors.iconColor} 
+                  />
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[
+                    styles.addToCartButton, 
+                    { 
+                      backgroundColor: colors.primaryButton,
+                      flex: 1
+                    }
+                  ]}
+                  onPress={handleAddToCart}
+                >
+                  <Text style={[
+                    styles.addToCartText, 
+                    { color: colors.primaryButtonText }
+                  ]}>
+                    Añadir al carrito
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.shareButton, { borderColor: colors.border }]}
+                  onPress={handleShare}
+                >
+                  <Ionicons name="share-outline" size={24} color={colors.iconColor} />
+                </TouchableOpacity>
+              </View>
+            </SafeAreaView>
           </>
         )}
       </SafeAreaView>
@@ -1028,18 +1151,15 @@ const ProductDetail = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
     height: 56,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    zIndex: 1001, // Asegurar que el header esté siempre visible
+    zIndex: 1001,
   },
   backButtonContainer: {
     padding: 8,
@@ -1069,12 +1189,11 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: 'bold',
   },
-  // Barra de búsqueda mejorada
+  // Enhanced search bar
   searchContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f7f7f7',
     borderRadius: 24,
     paddingHorizontal: 16,
     height: 45,
@@ -1085,8 +1204,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#efefef',
-    zIndex: 1002, // Asegurar que la barra esté por encima
+    zIndex: 1002,
   },
   searchIcon: {
     marginRight: 10,
@@ -1096,7 +1214,6 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 45,
     fontSize: 15,
-    color: '#333',
     fontWeight: '400',
     paddingVertical: 8,
   },
@@ -1116,16 +1233,15 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Contenedor de resultados mejorado
+  // Enhanced results container
   searchResultsContainer: {
     position: 'absolute',
-    top: 66, // Ajustado para dar espacio entre el header y los resultados
+    top: 66,
     left: 0,
     right: 0,
-    backgroundColor: '#fff',
     borderRadius: 16,
     marginHorizontal: 16,
-    marginTop: 4, // Espacio adicional desde el header
+    marginTop: 4,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -1138,21 +1254,18 @@ const styles = StyleSheet.create({
     maxHeight: 400,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#f2f2f2',
   },
   searchResultsList: {
     padding: 12,
   },
 
-  // Items de resultados mejorados
+  // Enhanced result items
   searchResultItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    backgroundColor: 'white',
     borderRadius: 8,
     marginBottom: 6,
   },
@@ -1170,25 +1283,21 @@ const styles = StyleSheet.create({
   searchResultName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#222',
     marginBottom: 4,
   },
   searchResultPrice: {
     fontSize: 13,
-    color: '#111',
     fontWeight: '500',
   },
 
-  // Estados de carga y mensajes mejorados
+  // Enhanced loading states and messages
   loadingResults: {
     padding: 24,
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
-    backgroundColor: 'white',
   },
   loadingText: {
-    color: '#555',
     marginLeft: 12,
     fontSize: 15,
     fontWeight: '400',
@@ -1196,23 +1305,22 @@ const styles = StyleSheet.create({
   noResultsText: {
     padding: 24,
     textAlign: 'center',
-    color: '#555',
     fontSize: 15,
     fontWeight: '400',
   },
 
-  // Overlay mejorado
+  // Enhanced overlay
   overlay: {
     position: 'absolute',
-    top: 70, // Aumentado para dejar visible el header
+    top: 70,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.1)', // Reducido para que sea más sutil
+    backgroundColor: 'rgba(0,0,0,0.1)',
     zIndex: 999,
   },
 
-  // Botón "Ver todos" mejorado
+  // Enhanced "View all" button
   viewAllContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1220,7 +1328,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#f0f0f0',
-    backgroundColor: '#fafafa',
   },
   viewAllText: {
     color: '#007AFF',
@@ -1233,47 +1340,39 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
     padding: 24,
   },
   errorText: {
     marginVertical: 16,
     fontSize: 14,
-    color: '#555555',
     textAlign: 'center',
   },
   backButton: {
     paddingVertical: 10,
     paddingHorizontal: 24,
-    backgroundColor: '#000',
     borderRadius: 24,
     marginTop: 16,
   },
   backButtonText: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '500',
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   carouselContainer: {
     height: width * 1.2,
-    backgroundColor: '#FFFFFF',
   },
   imageSlide: {
     width: width,
     height: width * 1.2,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
   },
   productImage: {
     width: '90%',
@@ -1291,18 +1390,13 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#DDDDDD',
     marginHorizontal: 4,
-  },
-  paginationDotActive: {
-    backgroundColor: '#000000',
   },
   productInfoSection: {
     padding: 24,
   },
   categoryLabel: {
     fontSize: 12,
-    color: '#666',
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 6,
@@ -1311,13 +1405,11 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 22,
     fontWeight: '600',
-    color: '#000000',
     marginBottom: 8,
   },
   productPrice: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000000',
     marginBottom: 12,
   },
   ratingsRow: {
@@ -1331,13 +1423,11 @@ const styles = StyleSheet.create({
   },
   ratingCount: {
     fontSize: 12,
-    color: '#666',
     marginLeft: 4,
   },
   sectionLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#000',
     marginBottom: 10,
     letterSpacing: 0.5,
   },
@@ -1348,7 +1438,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E5E5E5',
     borderRadius: 4,
     alignSelf: 'flex-start',
   },
@@ -1365,7 +1454,6 @@ const styles = StyleSheet.create({
     width: 36,
     textAlign: 'center',
     fontSize: 14,
-    color: '#000',
     fontWeight: '500',
   },
   sizeSection: {
@@ -1373,7 +1461,6 @@ const styles = StyleSheet.create({
   },
   sizeChip: {
     borderWidth: 1,
-    borderColor: '#E5E5E5',
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 4,
@@ -1381,7 +1468,6 @@ const styles = StyleSheet.create({
   },
   sizeText: {
     fontSize: 14,
-    color: '#000',
   },
   availabilitySection: {
     flexDirection: 'row',
@@ -1397,23 +1483,19 @@ const styles = StyleSheet.create({
   },
   availabilityText: {
     fontSize: 13,
-    color: '#666',
   },
   descriptionSection: {
     marginBottom: 24,
     borderTopWidth: 1,
-    borderTopColor: '#F2F2F2',
     paddingTop: 24,
   },
   descriptionText: {
     fontSize: 14,
-    color: '#333',
     lineHeight: 20,
   },
   additionalInfoSection: {
     marginBottom: 24,
     borderTopWidth: 1,
-    borderTopColor: '#F2F2F2',
     paddingTop: 24,
   },
   infoRow: {
@@ -1422,18 +1504,15 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 14,
-    color: '#666',
     width: 100,
   },
   infoValue: {
     fontSize: 14,
-    color: '#333',
     flex: 1,
   },
   shippingSection: {
     marginBottom: 24,
     borderTopWidth: 1,
-    borderTopColor: '#F2F2F2',
     paddingTop: 24,
   },
   shippingInfoRow: {
@@ -1444,23 +1523,35 @@ const styles = StyleSheet.create({
   shippingInfoTitle: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#333',
     marginBottom: 2,
   },
   shippingInfoDescription: {
     fontSize: 13,
-    color: '#666',
   },
-  bottomActionPanel: {
+  // New container for bottom panel with SafeAreaView
+  bottomActionPanelContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#FFFFFF',
+    zIndex: 100,
+    // Add elevation to ensure it sits above other elements
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -3 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  bottomActionPanel: {
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderTopWidth: 1,
-    borderTopColor: '#F2F2F2',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1469,24 +1560,20 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#EEE',
+    marginRight: 8,
   },
   addToCartButton: {
-    backgroundColor: '#000',
     borderRadius: 24,
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 36,
-    flex: 1,
-    marginHorizontal: 12,
+    marginHorizontal: 8,
   },
   addToCartText: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1494,13 +1581,12 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#EEE',
+    marginLeft: 8,
   },
-  // Estilos para el toast personalizado
+  // Custom toast styles
   toast: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 50 : 40,
