@@ -34,6 +34,17 @@ interface ProductImage {
   orden?: number;
 }
 
+// Añadimos la interfaz StockItem para manejar los stocks
+interface StockItem {
+  id: number;
+  id_producto: number;
+  talla: string;
+  color: string;
+  stock: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 interface Product {
   id: number;
   nombre: string;
@@ -48,6 +59,7 @@ interface Product {
     nombre_cat: string;
     descripcion: string;
   };
+  stocks: StockItem[]; // Añadimos los stocks al modelo de producto
 }
 
 interface SearchResult extends Product {
@@ -153,6 +165,14 @@ const ProductDetail = () => {
   const carouselRef = useRef<FlatList | null>(null);
   const router = useRouter();
   
+  // Estado para la selección de color
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [availableColors, setAvailableColors] = useState<string[]>([]);
+  
+  // NUEVO: Estado para la selección de talla
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [availableSizes, setAvailableSizes] = useState<string[]>([]);
+  
   // Get color scheme
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
@@ -205,6 +225,67 @@ const ProductDetail = () => {
       }).start(() => setToast(null));
     }, 2000);
   }, [toastAnimation]);
+  
+  // Función para extraer los colores disponibles del producto
+  const extractAvailableColors = useCallback((product: Product | null) => {
+    if (!product || !product.stocks || !Array.isArray(product.stocks) || product.stocks.length === 0) {
+      return [];
+    }
+    
+    // Filtrar solo stocks con cantidad > 0 y extraer colores únicos
+    const uniqueColors = [...new Set(
+      product.stocks
+        .filter(item => item.stock > 0)
+        .map(item => item.color)
+    )];
+    
+    return uniqueColors;
+  }, []);
+  
+  // NUEVO: Función para extraer las tallas disponibles según el color seleccionado
+  const extractAvailableSizes = useCallback((product: Product | null, selectedColor: string | null) => {
+    if (!product || !product.stocks || !Array.isArray(product.stocks) || product.stocks.length === 0) {
+      return [];
+    }
+    
+    // Filtrar por color seleccionado y stock > 0, luego extraer tallas únicas
+    const uniqueSizes = [...new Set(
+      product.stocks
+        .filter(item => 
+          item.stock > 0 && 
+          (!selectedColor || item.color === selectedColor)
+        )
+        .map(item => item.talla)
+    )];
+    
+    return uniqueSizes;
+  }, []);
+  
+  // Actualizar los colores cuando el producto cambia
+  useEffect(() => {
+    if (product) {
+      const colors = extractAvailableColors(product);
+      setAvailableColors(colors);
+      
+      // Seleccionar el primer color disponible por defecto
+      if (colors.length > 0 && !selectedColor) {
+        setSelectedColor(colors[0]);
+      }
+    }
+  }, [product, extractAvailableColors]);
+  
+  // NUEVO: Actualizar las tallas cuando cambia el color seleccionado
+  useEffect(() => {
+    if (product && selectedColor) {
+      const sizes = extractAvailableSizes(product, selectedColor);
+      setAvailableSizes(sizes);
+      
+      // Resetear la talla seleccionada si la actual ya no está disponible
+      if (!sizes.includes(selectedSize || '')) {
+        setSelectedSize(sizes.length > 0 ? sizes[0] : null);
+      }
+    }
+  }, [product, selectedColor, extractAvailableSizes, selectedSize]);
   
   // Function to search products
   const searchProducts = async (query: string) => {
@@ -453,46 +534,97 @@ const ProductDetail = () => {
     }
   };
 
-  const handleAddToCart = async () => {
-    if (!product) return;
-    
-    await refreshLoginStatus();
-    
-    const success = await addToCart({
-      id: product.id,
-      nombre: product.nombre,
-      precio: product.precio,
-      imagen: product.imagen,
-      talla: product.talla,
-      cantidad: quantity
-    });
+  // MODIFICADO: Función para añadir al carrito con el color y talla seleccionados en mayúsculas
+const handleAddToCart = async () => {
+  if (!product) return;
+  
+  // Verificar si se ha seleccionado un color
+  if (!selectedColor) {
+    showToast('Por favor selecciona un color', 'warning', 'alert-circle');
+    return;
+  }
+  
+  // Verificar si se ha seleccionado una talla (cuando hay tallas disponibles)
+  if (availableSizes.length > 0 && !selectedSize) {
+    showToast('Por favor selecciona una talla', 'warning', 'alert-circle');
+    return;
+  }
+  
+  // Verificar si hay stock disponible para esta combinación
+  // Usar toUpperCase() para la comparación de tallas
+  const stockItem = product.stocks?.find(item => 
+    item.color === selectedColor && 
+    (!availableSizes.length || item.talla.toUpperCase() === selectedSize?.toUpperCase())
+  );
+  
+  if (!stockItem || stockItem.stock < quantity) {
+    showToast('Stock insuficiente para esta selección', 'warning', 'alert-circle');
+    return;
+  }
+  
+  await refreshLoginStatus();
+  
+  const success = await addToCart({
+    id: product.id,
+    nombre: product.nombre,
+    precio: product.precio,
+    imagen: product.imagen,
+    talla: (selectedSize || 'única').toUpperCase(), // IMPORTANTE: Convertir a mayúsculas
+    color: selectedColor,
+    cantidad: quantity
+  });
 
-    if (!success) {
-      showToast('Inicia sesión para añadir productos', 'warning', 'person');
-      setTimeout(() => {
-        router.push('/perfil');
-      }, 2000);
-      return;
-    }
-    
-    showToast(
-      `${quantity} ${quantity > 1 ? 'unidades' : 'unidad'} añadidas al carrito`, 
-      'success', 
-      'cart'
-    );
-  };
+  if (!success) {
+    showToast('Inicia sesión para añadir productos', 'warning', 'person');
+    setTimeout(() => {
+      router.push('/perfil');
+    }, 2000);
+    return;
+  }
+  
+  showToast(
+    `${quantity} ${quantity > 1 ? 'unidades' : 'unidad'} añadidas al carrito`, 
+    'success', 
+    'cart'
+  );
+};
 
-  const handleBuyNow = () => {
-    if (!isLoggedIn) {
-      showToast('Inicia sesión para realizar compras', 'warning', 'person');
-      setTimeout(() => {
-        router.push('/perfil');
-      }, 2000);
-      return;
-    }
-    
-    showToast('¡Preparando tu compra!', 'info', 'card');
-  };
+  /// MODIFICADO: También verificar talla en compra directa y enviar en mayúsculas
+const handleBuyNow = () => {
+  if (!isLoggedIn) {
+    showToast('Inicia sesión para realizar compras', 'warning', 'person');
+    setTimeout(() => {
+      router.push('/perfil');
+    }, 2000);
+    return;
+  }
+  
+  // Verificar si se ha seleccionado un color
+  if (!selectedColor) {
+    showToast('Por favor selecciona un color', 'warning', 'alert-circle');
+    return;
+  }
+  
+  // Verificar si se ha seleccionado una talla (cuando hay tallas disponibles)
+  if (availableSizes.length > 0 && !selectedSize) {
+    showToast('Por favor selecciona una talla', 'warning', 'alert-circle');
+    return;
+  }
+  
+  // Verificar si hay stock disponible para esta combinación
+  // Usar toUpperCase() para la comparación de tallas
+  const stockItem = product?.stocks?.find(item => 
+    item.color === selectedColor && 
+    (!availableSizes.length || item.talla.toUpperCase() === selectedSize?.toUpperCase())
+  );
+  
+  if (!stockItem || stockItem.stock < quantity) {
+    showToast('Stock insuficiente para esta selección', 'warning', 'alert-circle');
+    return;
+  }
+  
+  showToast('¡Preparando tu compra!', 'info', 'card');
+};
 
   const handleToggleFavorite = async () => {
     if (!product) return;
@@ -942,6 +1074,78 @@ const ProductDetail = () => {
                   </Text>
                 </View>
                 
+                {/* Selector de color */}
+                {availableColors.length > 0 && (
+                  <View style={styles.colorSection}>
+                    <Text style={[styles.sectionLabel, { color: colors.text }]}>Color</Text>
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.colorChipsContainer}
+                    >
+                      {availableColors.map(color => (
+                        <TouchableOpacity
+                          key={color}
+                          onPress={() => setSelectedColor(color)}
+                          style={[
+                            styles.colorChip,
+                            { borderColor: colors.border },
+                            selectedColor === color && { 
+                              borderColor: colors.primaryButton,
+                              borderWidth: 2
+                            }
+                          ]}
+                        >
+                          <Text 
+                            style={[
+                              styles.colorText, 
+                              { color: selectedColor === color ? colors.primaryButton : colors.text }
+                            ]}
+                          >
+                            {color}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+                
+                {/* NUEVO: Selector de tallas */}
+                {availableSizes.length > 0 && (
+                  <View style={styles.sizeSection}>
+                    <Text style={[styles.sectionLabel, { color: colors.text }]}>Talla</Text>
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.colorChipsContainer}
+                    >
+                      {availableSizes.map(size => (
+                        <TouchableOpacity
+                          key={size}
+                          onPress={() => setSelectedSize(size)}
+                          style={[
+                            styles.colorChip,
+                            { borderColor: colors.border },
+                            selectedSize === size && { 
+                              borderColor: colors.primaryButton,
+                              borderWidth: 2
+                            }
+                          ]}
+                        >
+                          <Text 
+                            style={[
+                              styles.colorText, 
+                              { color: selectedSize === size ? colors.primaryButton : colors.text }
+                            ]}
+                          >
+                            {size.toUpperCase()}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+                
                 {/* Quantity selector */}
                 <View style={styles.quantitySection}>
                   <Text style={[styles.sectionLabel, { color: colors.text }]}>
@@ -986,18 +1190,6 @@ const ProductDetail = () => {
                     </TouchableOpacity>
                   </View>
                 </View>
-                
-                {/* Size */}
-                {product.talla && (
-                  <View style={styles.sizeSection}>
-                    <Text style={[styles.sectionLabel, { color: colors.text }]}>Talla</Text>
-                    <View style={[styles.sizeChip, { borderColor: colors.quantityBorder }]}>
-                      <Text style={[styles.sizeText, { color: colors.text }]}>
-                        {product.talla}
-                      </Text>
-                    </View>
-                  </View>
-                )}
                 
                 {/* Availability */}
                 <View style={styles.availabilitySection}>
@@ -1425,6 +1617,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginLeft: 4,
   },
+  
+  // Nuevos estilos para la sección de colores
+  colorSection: {
+    marginBottom: 24,
+  },
+  colorChipsContainer: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+  },
+  colorChip: {
+    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 4,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  colorText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  
   sectionLabel: {
     fontSize: 14,
     fontWeight: '600',

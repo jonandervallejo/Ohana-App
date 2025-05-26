@@ -9,6 +9,7 @@ interface CartItem {
   imagen: string;
   cantidad: number;
   talla?: string;
+  color?: string;
 }
 
 interface CartContextType {

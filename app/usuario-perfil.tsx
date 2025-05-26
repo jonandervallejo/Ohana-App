@@ -549,7 +549,7 @@ const UserProfileScreen = () => {
                     backgroundColor: colors.card,
                     ...(Platform.OS === 'android' ? { borderColor: colors.border } : {}) 
                   }]}
-                  onPress={() => router.push('/favoritos')}
+                  onPress={() => router.push('/pedidos')}
                   activeOpacity={0.7}
                 >
                   <View style={[styles.actionIconContainer, { backgroundColor: colors.subtle }]}>

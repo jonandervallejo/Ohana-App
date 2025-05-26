@@ -1,106 +1,105 @@
 import React, { useEffect, useRef } from 'react';
-import { 
-  StyleSheet, 
-  TouchableOpacity, 
-  View, 
-  Animated,
-  ViewStyle
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { TouchableOpacity, Animated, StyleSheet, View } from 'react-native';
+import { FontAwesome5 } from '@expo/vector-icons';
 import { useColorScheme } from '../hooks/useColorScheme';
-import Colors from '../constants/Color';
 
 interface ThemeToggleProps {
-  style?: ViewStyle;
   size?: 'small' | 'medium' | 'large';
 }
 
-export function ThemeToggle({ style, size = 'medium' }: ThemeToggleProps) {
+const ThemeToggleComponent: React.FC<ThemeToggleProps> = ({ 
+  size = 'medium' 
+}) => {
   const { colorScheme, toggleColorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const containerScale = size === 'small' ? 0.8 : size === 'large' ? 1.2 : 1;
   
   // Animation values
-  const rotateAnim = useRef(new Animated.Value(colorScheme === 'light' ? 0 : 1)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  
-  // Get sizes based on the size prop
-  const getSize = () => {
-    switch(size) {
-      case 'small': return { button: 36, icon: 16 };
-      case 'large': return { button: 56, icon: 28 };
-      default: return { button: 44, icon: 22 };
-    }
-  };
-  
-  const { button: buttonSize, icon: iconSize } = getSize();
+  const toggleAnim = useRef(new Animated.Value(isDark ? 1 : 0)).current;
   
   // Update animation when theme changes
   useEffect(() => {
-    // First create a small "press" animation
-    Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 0.85,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-    
-    // Rotate animation
-    Animated.timing(rotateAnim, {
-      toValue: colorScheme === 'light' ? 0 : 1,
-      duration: 400,
-      useNativeDriver: true,
+    Animated.spring(toggleAnim, {
+      toValue: isDark ? 1 : 0,
+      friction: 5,
+      tension: 40,
+      useNativeDriver: false,
     }).start();
-  }, [colorScheme]);
+  }, [isDark, toggleAnim]);
   
-  // Interpolate rotation
-  const rotate = rotateAnim.interpolate({
+  // Interpolated values for animations
+  const translateX = toggleAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '360deg']
+    outputRange: [2, 22] // Adjust based on container width
   });
-
+  
+  const rotation = toggleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg']
+  });
+  
+  const backgroundColor = toggleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#e6e6e6', '#333'] // Light to dark track
+  });
+  
   return (
-    <TouchableOpacity 
-      activeOpacity={0.7}
-      onPress={toggleColorScheme} // Conectamos la función toggle aquí
-      style={[styles.container, { width: buttonSize, height: buttonSize }, style]}
-    >
-      <Animated.View 
-        style={[
-          styles.iconContainer, 
-          { 
-            backgroundColor: colorScheme === 'dark' ? '#2a2a2a' : '#f5f5f5',
-            transform: [{ rotate }, { scale: scaleAnim }] 
-          }
-        ]}
+    <View style={{ transform: [{ scale: containerScale }] }}>
+      <TouchableOpacity 
+        activeOpacity={0.8}
+        onPress={toggleColorScheme}
+        style={styles.container}
       >
-        <View>
-          {colorScheme === 'light' ? (
-            <Ionicons name="sunny" size={iconSize} color="#FF9500" />
-          ) : (
-            <Ionicons name="moon" size={iconSize} color="#FFD60A" />
-          )}
-        </View>
-      </Animated.View>
-    </TouchableOpacity>
+        <Animated.View style={[styles.track, { backgroundColor }]}>
+          <Animated.View 
+            style={[
+              styles.thumb,
+              {
+                backgroundColor: isDark ? '#FFD60A' : '#FF9500',
+                transform: [
+                  { translateX },
+                  { rotate: rotation }
+                ],
+              }
+            ]}
+          >
+            <FontAwesome5 
+              name={isDark ? "moon" : "sun"} 
+              size={12} 
+              color={isDark ? "#121212" : "#fff"} 
+            />
+          </Animated.View>
+        </Animated.View>
+      </TouchableOpacity>
+    </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  track: {
+    width: 48,
+    height: 26,
+    borderRadius: 13,
+    padding: 2,
+  },
+  thumb: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
-    overflow: 'hidden',
-  },
-  iconContainer: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 999,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  }
 });
+
+// Export both as default export (for router) and named export (for convenience)
+export { ThemeToggleComponent as ThemeToggle };
+export default ThemeToggleComponent;

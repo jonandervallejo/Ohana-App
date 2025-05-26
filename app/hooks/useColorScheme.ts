@@ -1,64 +1,73 @@
 import { useState, useEffect } from 'react';
+import { useColorScheme as useNativeColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useColorScheme as useDeviceColorScheme } from 'react-native';
 
-// Theme persistence key
-export const THEME_PREFERENCE_KEY = 'theme_preference';
+// Key for storing user preference
+const THEME_PREFERENCE_KEY = 'THEME_PREFERENCE'; 
 
-// Type for our theme
-export type ColorScheme = 'light' | 'dark';
+// Type definitions
+type ColorSchemeType = 'light' | 'dark';
+type ThemePreference = 'system' | ColorSchemeType;
 
-/**
- * Custom hook for managing color scheme with persistence
- */
-export function useColorScheme(): {
-  colorScheme: ColorScheme;
-  setColorScheme: (scheme: ColorScheme) => Promise<void>;
-  toggleColorScheme: () => Promise<void>;
-} {
-  // Get device preference as initial value
-  const deviceColorScheme = useDeviceColorScheme() as ColorScheme || 'light';
-  
-  // State to hold our theme preference
-  const [colorScheme, setColorSchemeState] = useState<ColorScheme>('light');
+interface ColorSchemeHook {
+  colorScheme: ColorSchemeType;
+  themePreference: ThemePreference;
+  toggleColorScheme: () => void;
+  setThemePreference: (preference: ThemePreference) => void;
+}
 
-  // Initialize from storage
+const useColorSchemeImplementation = (): ColorSchemeHook => {
+  const systemColorScheme = useNativeColorScheme() as ColorSchemeType;
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>('system');
+  const [colorScheme, setColorScheme] = useState<ColorSchemeType>(systemColorScheme || 'light');
+
+  // Load saved theme preference
   useEffect(() => {
-    const loadStoredTheme = async () => {
+    (async () => {
       try {
-        const storedTheme = await AsyncStorage.getItem(THEME_PREFERENCE_KEY);
-        if (storedTheme) {
-          // If we have a stored preference, use it
-          setColorSchemeState(storedTheme as ColorScheme);
-        } else {
-          // Otherwise default to device preference
-          setColorSchemeState(deviceColorScheme);
+        const savedPreference = await AsyncStorage.getItem(THEME_PREFERENCE_KEY);
+        if (savedPreference) {
+          setThemePreferenceState(savedPreference as ThemePreference);
         }
       } catch (error) {
-        console.error("Error loading theme preference:", error);
-        // Default to light theme on error
-        setColorSchemeState('light');
+        console.error('Error loading theme preference:', error);
       }
-    };
+    })();
+  }, []);
 
-    loadStoredTheme();
-  }, [deviceColorScheme]);
+  // Update color scheme when system theme or preference changes
+  useEffect(() => {
+    if (themePreference === 'system') {
+      setColorScheme(systemColorScheme || 'light');
+    } else {
+      setColorScheme(themePreference);
+    }
+  }, [systemColorScheme, themePreference]);
 
-  // Function to set color scheme with persistence
-  const setColorScheme = async (newScheme: ColorScheme) => {
+  // Save theme preference
+  const setThemePreference = async (preference: ThemePreference) => {
     try {
-      await AsyncStorage.setItem(THEME_PREFERENCE_KEY, newScheme);
-      setColorSchemeState(newScheme);
+      await AsyncStorage.setItem(THEME_PREFERENCE_KEY, preference);
+      setThemePreferenceState(preference);
     } catch (error) {
-      console.error("Error saving theme preference:", error);
+      console.error('Error saving theme preference:', error);
     }
   };
 
-  // Function to toggle between light and dark
-  const toggleColorScheme = async () => {
-    const newScheme = colorScheme === 'light' ? 'dark' : 'light';
-    await setColorScheme(newScheme);
+  // Toggle between light and dark
+  const toggleColorScheme = () => {
+    const newTheme = colorScheme === 'dark' ? 'light' : 'dark';
+    setThemePreference(newTheme);
   };
 
-  return { colorScheme, setColorScheme, toggleColorScheme };
-}
+  return {
+    colorScheme,
+    themePreference,
+    toggleColorScheme,
+    setThemePreference,
+  };
+};
+
+// Export both as default export (for router) and named export (for convenience)
+export { useColorSchemeImplementation as useColorScheme };
+export default useColorSchemeImplementation;
