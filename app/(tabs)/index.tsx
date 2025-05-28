@@ -73,7 +73,7 @@ interface SearchResult extends Product {
 const { width } = Dimensions.get('window');
 
 // ********************************ELIMINAR TODO LO QUE SE SAQUE DESDE LOCAL************************************
-const DEFAULT_IMAGE = require('@/assets/images/camiseta1.jpg');
+//const DEFAULT_IMAGE = require('@/assets/images/camiseta1.jpg');
 
 //dominio para llamadas a la API
 const API_BASE_URL = 'https://ohanatienda.ddns.net';
@@ -153,7 +153,6 @@ const normalizeImageUrl = (imageUrl: string): string => {
 // Componente optimizado para renderizar imágenes con fallback
 const SafeImage = ({ 
   source, 
-  fallbackSource = DEFAULT_IMAGE,
   style,
   resizeMode = "cover",
   onError,
@@ -172,17 +171,17 @@ const SafeImage = ({
   // Si la fuente es una URL y ya sabemos que falla, mostrar directamente el fallback
   const isRemoteSource = source && typeof source === 'object' && source.uri;
   const sourceUri = isRemoteSource ? source.uri : null;
-  const useDirectFallback = isRemoteSource && (ImageCache.hasFailed(sourceUri) || !sourceUri || sourceUri.trim() === '');
+  //const useDirectFallback = isRemoteSource && (ImageCache.hasFailed(sourceUri) || !sourceUri || sourceUri.trim() === '');
   
-  if (useDirectFallback) {
+  /*if (useDirectFallback) {
     return <Image source={fallbackSource} style={style} resizeMode={resizeMode} />;
-  }
+  }*/
   
   return (
     <View style={style}>
       {/* Fallback base siempre visible */}
       <Image 
-        source={fallbackSource} 
+        //source={fallbackSource} 
         style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} 
         resizeMode={resizeMode} 
       />
@@ -509,7 +508,6 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
               >
                 <SafeImage
                   source={image.imagen ? { uri: image.imagen } : undefined}
-                  fallbackSource={DEFAULT_IMAGE}
                   style={styles.carruselImage}
                   resizeMode="cover"
                   onError={() => handleImageError(image.id)}
@@ -549,7 +547,6 @@ const Carrusel = ({ scrollRef }: { scrollRef: React.RefObject<ScrollView> }) => 
             {selectedImage && (
               <SafeImage
                 source={selectedImage.imagen ? { uri: selectedImage.imagen } : undefined}
-                fallbackSource={DEFAULT_IMAGE}
                 style={styles.enlargedImage}
                 resizeMode="contain"
                 onError={() => handleImageError(selectedImage.id)}
@@ -606,7 +603,6 @@ const CategoryItem = React.memo(({
       <View style={styles.categoryImageWrapper}>
         <SafeImage 
           source={{ uri: imageUrl }}
-          fallbackSource={DEFAULT_IMAGE}
           style={styles.categoryImage}
           resizeMode="cover"
           imageKey={`category-${category.id}`}

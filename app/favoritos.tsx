@@ -335,13 +335,13 @@ const FavoriteItemCard = ({
             </TouchableOpacity>
             
             {/* Botón de añadir al carrito */}
-            <TouchableOpacity
+            {/*<TouchableOpacity
               style={[styles.addToCartButton, { backgroundColor: colors.button }]}
               onPress={() => handleAddToCart(item)}
             >
               <Ionicons name="cart-outline" size={18} color={colors.buttonText} />
               <Text style={[styles.addToCartText, { color: colors.buttonText }]}>Añadir</Text>
-            </TouchableOpacity>
+            </TouchableOpacity>*/}
           </View>
         </View>
       </View>

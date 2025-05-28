@@ -187,7 +187,6 @@ export default function CarritoScreen() {
     }
     
     // Para otros productos sin mapeo específico
-    return "Negro"; // Un color seguro que probablemente exista para la mayoría de los productos
   };
 
   // Función para procesar el pedido - FIXED VERSION

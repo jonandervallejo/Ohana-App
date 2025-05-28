@@ -112,6 +112,13 @@ interface Product {
   id_categoria?: number;
 }
 
+{/*interface Stock {
+  id: number;
+  color: string;
+  talla: string;
+  stock: number;
+*/}
+
 interface Category {
   id: number;
   nombre_cat: string;
@@ -364,13 +371,12 @@ function TiendaScreen() {
     }
   };
 
-  // Función mejorada para añadir al carrito (similar a la de detalles.tsx)
+  //funcion para añadir al carrito
   const handleAddToCart = async (product: Product) => {
     try {
-      // Actualizar el estado de inicio de sesión antes de intentar añadir al carrito
       await refreshLoginStatus();
       
-      // Cantidad por defecto para añadir desde la vista de tienda
+      //cantidad por defecto para añadir desde la vista de tienda
       const quantity = 1;
       
       const success = await addToCart({
@@ -378,7 +384,8 @@ function TiendaScreen() {
         nombre: product.nombre,
         precio: product.precio,
         imagen: product.imagen,
-        talla: product.talla || '', // Usar string vacío si no hay talla
+        talla: product.talla || '',
+        //color: stock.color,
         cantidad: quantity
       });
   
@@ -1101,13 +1108,13 @@ const renderLoadingSpinner = () => {
         <View style={styles.productInfo}>
             <Text style={[styles.productName, { color: colors.text }]} numberOfLines={2}>{item.nombre}</Text>
             <Text style={[styles.productPrice, { color: colors.text }]}>{item.precio} €</Text>
-          <TouchableOpacity 
+          {/*<TouchableOpacity 
             style={styles.addToCartButton}
             onPress={() => handleAddToCart(item)}
           >
             <FontAwesome5 name="shopping-cart" size={16} color="#fff" />
             <Text style={styles.addToCartText}>Añadir</Text>
-          </TouchableOpacity>
+          </TouchableOpacity>*/}
         </View>
       </View>
     );
