@@ -455,7 +455,7 @@ const FavoritosScreen = () => {
     Animated.parallel([
       Animated.timing(modalScaleAnim, {
         toValue: 1,
-        duration: 300,
+        duration: 300, 
         useNativeDriver: true
       }),
       Animated.timing(modalOpacityAnim, {
